@@ -1,0 +1,21 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build and IDE files
+.vscode/
+.claude/
+build/
+cmake-build/
+exports/
+node_modules/
+
+# Zip files
+*.zip
+
+# Worktrees
+.worktrees/
+worktree-*/
+v2-worktree/

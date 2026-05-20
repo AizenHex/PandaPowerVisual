@@ -1,0 +1,813 @@
+:root {
+  color-scheme: dark;
+  --bg: #1e1e1e;               /* AutoCAD dark matte gray */
+  --panel-solid: #1b1b1b;      /* Darker panel background */
+  --panel-light: #222222;      /* Button and card fill background */
+  --panel-active: #2a2a2a;     /* Active selection fill */
+  --stroke: #3c3c3c;           /* Panel border */
+  --stroke-strong: #5a5a5a;    /* High contrast border */
+  
+  --text: #dbdbdb;             /* Light gray/white text */
+  --muted: #888888;            /* Gray text */
+  --muted-dark: #4f4f4f;       /* Very dark gray */
+  
+  /* AutoCAD Canvas theme */
+  --canvas-bg: #111111;        /* Deep Black Canvas */
+  --accent: #007acc;           /* AutoCAD Active Blue */
+  --accent-light: rgba(0, 122, 204, 0.2);
+  
+  --success: #2ecc71;
+  --warning: #f1c40f;
+  --danger: #e74c3c;
+  
+  --transition: none;          /* Instant UI response */
+}
+
+/* Force flat sharp corners ONLY on HTML layout elements, leaving SVG rx/ry alone */
+div, button, input, select, header, aside, main, table, th, td, kbd {
+  border-radius: 0px !important;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 11px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* App Shell Layout */
+.app-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr 300px;
+  grid-template-rows: 38px 1fr;
+  grid-template-areas:
+    "topbar topbar topbar"
+    "left main right";
+  width: 100vw;
+  height: 100vh;
+}
+
+/* Sidebar toggled state overrides */
+.app-shell.hide-left {
+  grid-template-columns: 0px 1fr 300px;
+}
+.app-shell.hide-right {
+  grid-template-columns: 240px 1fr 0px;
+}
+.app-shell.hide-left.hide-right {
+  grid-template-columns: 0px 1fr 0px;
+}
+
+.app-shell.hide-left .left-panel {
+  display: none !important;
+}
+.app-shell.hide-right .right-panel {
+  display: none !important;
+}
+
+/* Topbar Header */
+.topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  gap: 0px;
+  padding: 0;
+  background: var(--panel-solid);
+  border-bottom: 1px solid var(--stroke);
+  z-index: 100;
+  height: 38px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-right: 1px solid var(--stroke);
+  height: 100%;
+}
+
+.brand .logo {
+  font-size: 14px;
+  color: var(--accent);
+}
+
+.brand strong {
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+
+.brand span {
+  display: none; /* Hide subtitle for minimal layout */
+}
+
+/* Toolbar Buttons & Groups */
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  border-right: 1px solid var(--stroke);
+}
+
+.toolbar-label {
+  font-size: 9px;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 8px;
+  letter-spacing: 0.5px;
+}
+
+.tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  padding: 0 12px;
+  border: none;
+  border-right: 1px solid var(--stroke);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tool-btn:hover {
+  background: var(--panel-light);
+}
+
+.tool-btn.active {
+  background: var(--accent) !important;
+  color: #ffffff !important;
+}
+
+.tool-btn.icon-btn {
+  width: 38px;
+  padding: 0;
+}
+
+.divider {
+  width: 1px;
+  height: 100%;
+  background: var(--stroke);
+}
+
+.zoom-readout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  color: var(--warning);
+  font-family: inherit;
+  font-size: 11px;
+  height: 100%;
+  border-right: 1px solid var(--stroke);
+}
+
+.primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 0 14px;
+  border: none;
+  border-right: 1px solid var(--stroke);
+  background: #2a2a2a;
+  color: var(--success);
+  font-family: inherit;
+  font-weight: bold;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.primary-btn:hover {
+  background: #333333;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 12px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  border-right: 1px solid var(--stroke);
+}
+.status-pill.ok { color: var(--success); }
+.status-pill.warn { color: var(--warning); }
+.status-pill.err { color: var(--danger); }
+
+/* Left & Right Sidebars */
+.left-panel {
+  grid-area: left;
+  background: var(--panel-solid);
+  border-right: 1px solid var(--stroke);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.right-panel {
+  grid-area: right;
+  background: var(--panel-solid);
+  border-left: 1px solid var(--stroke);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+/* Panel Section ASCII Headers */
+.panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.panel-section h2 {
+  font-size: 11px;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--stroke);
+  padding-bottom: 4px;
+}
+
+.panel-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--panel-light);
+  border: 1px solid var(--stroke);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  margin-bottom: 2px;
+}
+
+.panel-btn:hover {
+  background: var(--panel-active);
+  border-color: var(--stroke-strong);
+}
+
+.panel-btn.accent {
+  border-color: rgb(230, 140, 70);
+  color: rgb(230, 140, 70);
+}
+
+/* Network Summary Grid */
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px;
+  background: var(--panel-light);
+  padding: 8px;
+  border: 1px solid var(--stroke);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.summary-grid dt {
+  color: var(--muted);
+}
+
+.summary-grid dd {
+  font-weight: bold;
+  color: var(--text);
+  text-align: right;
+}
+
+.validation-box {
+  background: var(--panel-light);
+  border: 1px solid var(--stroke);
+  padding: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.validation-box.ok {
+  color: var(--success);
+  border-color: var(--stroke);
+}
+
+.validation-box.err {
+  color: var(--danger);
+  border-color: var(--stroke);
+}
+
+.validation-error-item {
+  margin-bottom: 2px;
+}
+
+/* Hotkeys Help Panel */
+.hotkey-help {
+  margin-top: auto;
+  background: var(--panel-light);
+  padding: 8px;
+  border: 1px solid var(--stroke);
+}
+
+.hotkey-help h3 {
+  font-size: 9px;
+  text-transform: uppercase;
+  color: var(--text);
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--stroke);
+  padding-bottom: 4px;
+}
+
+.hotkey-help ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hotkey-help li {
+  font-size: 9px;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+kbd {
+  background: var(--panel-solid);
+  border: 1px solid var(--stroke);
+  padding: 1px 4px;
+  font-family: inherit;
+  font-size: 9px;
+  color: var(--accent);
+}
+
+/* Main Workspace */
+.workspace {
+  grid-area: main;
+  display: grid;
+  grid-template-rows: 32px 1fr 180px;
+  background-color: var(--canvas-bg);
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--stroke);
+  border-left: 1px solid var(--stroke);
+}
+
+.canvas-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: var(--panel-solid);
+  border-bottom: 1px solid var(--stroke);
+  height: 32px;
+}
+
+.canvas-title strong {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.canvas-title span {
+  font-size: 10px;
+  color: var(--muted);
+  margin-left: 10px;
+}
+
+.canvas-modes {
+  display: flex;
+  background: var(--panel-light);
+  border: 1px solid var(--stroke);
+  padding: 1px;
+}
+
+.canvas-modes .seg {
+  height: 22px;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.canvas-modes .seg.active {
+  background: var(--panel-active);
+  color: var(--text);
+}
+
+/* Viewport & SVG Elements */
+.canvas-viewport {
+  position: relative;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+#sldSvg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#gridBackground {
+  pointer-events: none;
+}
+
+/* SVG AutoCAD Solid Grid Styling */
+#minorGrid path {
+  stroke: #1f1f1f !important;
+  stroke-width: 0.8px !important;
+}
+#majorGrid path {
+  stroke: #2c2c2c !important;
+  stroke-width: 1.2px !important;
+}
+
+/* SVG Node Group Wrapper */
+.sld-node-group {
+  cursor: move;
+  pointer-events: all;
+}
+
+/* Exact Background Colors and Outline Thicknesses from legacy python components */
+.sld-node-bg {
+  stroke-linecap: square;
+}
+
+/* Slack (source) theme: bg=(35, 30, 20), border=(255, 180, 50), border_thickness=3 */
+.sld-node-source {
+  fill: rgb(35, 30, 20) !important;
+  stroke: rgb(255, 180, 50) !important;
+  stroke-width: 3px !important;
+}
+
+/* Busbar (bus) theme: bg=(20, 25, 35), border=(100, 190, 255), border_thickness=2 */
+.sld-node-bus {
+  fill: rgb(20, 25, 35) !important;
+  stroke: rgb(100, 190, 255) !important;
+  stroke-width: 2px !important;
+}
+
+/* Generator (gen) theme: bg=(20, 30, 25), border=(80, 220, 120), border_thickness=2 */
+.sld-node-gen {
+  fill: rgb(20, 30, 25) !important;
+  stroke: rgb(80, 220, 120) !important;
+  stroke-width: 2px !important;
+}
+
+/* Transformer (trafo) theme: bg=(35, 30, 25), border=(230, 140, 70), border_thickness=2 */
+.sld-node-trafo {
+  fill: rgb(35, 30, 25) !important;
+  stroke: rgb(230, 140, 70) !important;
+  stroke-width: 2px !important;
+}
+
+/* Load (load) theme: bg=(35, 25, 25), border=(230, 100, 100), border_thickness=2 */
+.sld-node-load {
+  fill: rgb(35, 25, 25) !important;
+  stroke: rgb(230, 100, 100) !important;
+  stroke-width: 2px !important;
+}
+
+/* Shunt (shunt) theme: bg=(30, 25, 35), border=(180, 100, 255), border_thickness=2 */
+.sld-node-shunt {
+  fill: rgb(30, 25, 35) !important;
+  stroke: rgb(180, 100, 255) !important;
+  stroke-width: 2px !important;
+}
+
+/* Hover and selection outlines */
+.sld-node-group:hover .sld-node-bg {
+  outline: 1px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.sld-node-group.selected .sld-node-bg {
+  outline: 1.5px dashed #ffffff;
+  outline-offset: 4px;
+}
+
+/* Header bar fills from legacy python components */
+.sld-node-header {
+  stroke: none;
+}
+
+/* Slack header: title_bg=(180, 110, 20) */
+.header-source {
+  fill: rgb(180, 110, 20) !important;
+}
+
+/* Bus header: title_bg=(20, 60, 100) */
+.header-bus {
+  fill: rgb(20, 60, 100) !important;
+}
+
+/* Gen header: title_bg=(20, 80, 45) */
+.header-gen {
+  fill: rgb(20, 80, 45) !important;
+}
+
+/* Trafo header: title_bg=(100, 55, 20) */
+.header-trafo {
+  fill: rgb(100, 55, 20) !important;
+}
+
+/* Load header: title_bg=(100, 30, 30) */
+.header-load {
+  fill: rgb(100, 30, 30) !important;
+}
+
+/* Shunt header: title_bg=(70, 30, 100) */
+.header-shunt {
+  fill: rgb(70, 30, 100) !important;
+}
+
+/* Text Element Styles matching Dear PyGui Console appearance */
+.sld-node-title {
+  fill: #ffffff !important;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10.5px !important;
+  font-weight: bold !important;
+  pointer-events: none;
+}
+
+.sld-node-body-line {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10px !important;
+  font-weight: normal;
+  pointer-events: none;
+}
+
+/* exact body line text colors from python components */
+.line-slack { fill: rgb(255, 180, 50) !important; }   /* gold */
+.line-bus { fill: rgb(100, 190, 255) !important; }   /* light blue */
+.line-gen { fill: rgb(120, 230, 130) !important; }   /* light green */
+.line-trafo { fill: rgb(230, 160, 80) !important; }  /* copper */
+.line-load { fill: rgb(230, 110, 110) !important; }  /* red */
+.line-shunt { fill: rgb(200, 130, 230) !important; } /* light purple */
+.line-val { fill: rgb(200, 200, 200) !important; }   /* white/silver value text */
+.line-gray { fill: rgb(120, 120, 120) !important; }  /* gray "IN" */
+
+/* SVG Pins (Connection Points) - Yellow circle on borders */
+.sld-pin {
+  fill: #f1c40f !important;
+  stroke: #000000 !important;
+  stroke-width: 1px !important;
+  cursor: crosshair;
+  pointer-events: all;
+}
+
+.sld-pin:hover {
+  fill: #ffffff !important;
+}
+
+/* SVG Line / Connection Styles */
+.sld-line {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2px;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.sld-line:hover {
+  stroke-width: 3px;
+  stroke: var(--text);
+}
+
+.sld-line.selected {
+  stroke: #ffffff;
+  stroke-width: 2.5px;
+  stroke-dasharray: 4 2;
+}
+
+/* Active flows or result statuses */
+.sld-line.load-flow-safe { stroke: var(--success); }
+.sld-line.load-flow-warn { stroke: var(--warning); }
+.sld-line.load-flow-danger { stroke: var(--danger); stroke-width: 3px; }
+
+/* Temporary line when dragging connection */
+.sld-line.temp-line {
+  stroke: #ffffff;
+  stroke-dasharray: 4 2;
+  stroke-width: 1.5px;
+  pointer-events: none;
+}
+
+/* Source Feeder Colored cables (Source Tracing) */
+.sld-line.feeder-slack-0 { stroke: rgb(255, 180, 50); }
+.sld-line.feeder-slack-1 { stroke: rgb(100, 190, 255); }
+.sld-line.feeder-slack-2 { stroke: rgb(80, 220, 120); }
+.sld-line.feeder-slack-3 { stroke: rgb(180, 100, 255); }
+.sld-line.feeder-slack-4 { stroke: #ffffff; }
+.sld-line.feeder-island { stroke: var(--stroke-strong); stroke-dasharray: 4 4; opacity: 0.6; }
+
+/* Properties Sidebar Elements */
+.properties-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--stroke);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.properties-head strong {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--warning);      /* Yellow Panel Properti Header */
+}
+
+.properties-head span {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.prop-block {
+  border-bottom: 1px solid var(--stroke);
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prop-block:last-child {
+  border-bottom: none;
+}
+
+.prop-title {
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: var(--warning);
+  border-bottom: 1px solid var(--stroke);
+  padding-bottom: 4px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field span {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.field input, .field select {
+  height: 24px;
+  background: var(--panel-solid);
+  border: 1px solid var(--stroke);
+  color: var(--text);
+  padding: 0 6px;
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+.field input:focus, .field select:focus {
+  border-color: var(--accent);
+}
+
+.prop-list {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.prop-list dt {
+  color: var(--muted);
+}
+
+.prop-list dd {
+  font-weight: bold;
+  color: var(--text);
+}
+
+.empty-state {
+  color: var(--muted);
+  font-style: italic;
+  padding: 24px 0;
+  text-align: center;
+  font-size: 11px;
+}
+
+/* Bottom Results Panel & Table */
+.results-panel {
+  border-top: 1px solid var(--stroke);
+  background: var(--panel-solid);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.results-head {
+  height: 28px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--stroke);
+  background: var(--panel-solid);
+  flex-shrink: 0;
+}
+
+.results-head strong {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.results-head span {
+  font-size: 9px;
+  color: var(--warning);
+}
+
+.results-table-container {
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 11px;
+}
+
+th, td {
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--stroke);
+}
+
+th {
+  background: var(--panel-light);
+  color: var(--muted);
+  font-weight: bold;
+  text-transform: uppercase;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+td {
+  font-family: inherit;
+}
+
+.empty-results {
+  text-align: center;
+  color: var(--muted);
+  font-style: italic;
+  padding: 16px;
+}
+
+/* Table loading statuses color rules */
+td.good { color: var(--success); }
+td.warn { color: var(--warning); }
+td.bad { color: var(--danger); font-weight: bold; }
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: var(--panel-solid);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--stroke);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}

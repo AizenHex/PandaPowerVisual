@@ -10,12 +10,11 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 WEB_DIR = Path(__file__).resolve().parent
-ROOT_DIR = WEB_DIR.parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+if str(WEB_DIR) not in sys.path:
+    sys.path.insert(0, str(WEB_DIR))
 
-import engine  # noqa: E402
-import state  # noqa: E402
+import engine
+import state
 
 
 def _float(data: dict, key: str, default: float = 0.0) -> float:

@@ -3,8 +3,9 @@ import sys
 import unittest
 from pathlib import Path
 
+# server.py is in the parent directory of this tests/ folder (web-legacy-ui/)
 ROOT = Path(__file__).resolve().parents[1]
-SERVER_PATH = ROOT / "web-legacy-ui" / "server.py"
+SERVER_PATH = ROOT / "server.py"
 
 spec = importlib.util.spec_from_file_location("web_legacy_server", SERVER_PATH)
 web_legacy_server = importlib.util.module_from_spec(spec)

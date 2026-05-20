@@ -1,73 +1,102 @@
 # Grid Simulator
 
-Aplikasi simulator jaringan listrik berbasis Dear PyGui dan pandapower.
+Simulator jaringan listrik yang tersedia dalam tiga versi terpisah. Setiap versi berdiri mandiri di dalam foldernya masing-masing.
 
-## Menjalankan Aplikasi
+---
 
-```powershell
-python -m pip install -r requirements.txt
-python demo.py
+## Struktur Proyek
+
+```
+grid-simulator/
+│
+├── web-prototype/          # Versi 1: Desktop App (pywebview + SVG UI)
+│   ├── index.html          # UI SVG AutoCAD-style
+│   ├── app.js              # Logika frontend
+│   ├── styles.css
+│   ├── main.py             # Launcher desktop (pywebview)
+│   ├── engine.py           # Backend simulator pandapower
+│   ├── state.py            # State global simulator
+│   └── tests/              # Unit test versi ini
+│
+├── web-legacy-ui/          # Versi 2: Legacy Web UI (HTTP server + HTML/CSS/JS)
+│   ├── index.html
+│   ├── app.js
+│   ├── styles.css
+│   ├── server.py           # Server HTTP lokal (localhost:8765)
+│   ├── engine.py           # Backend simulator pandapower
+│   ├── state.py            # State global simulator
+│   └── tests/              # Unit test versi ini
+│
+├── legacy_dpg/             # Versi 3: Dear PyGui Desktop App
+│   ├── app.py              # Aplikasi utama DearPyGui
+│   ├── demo.py             # Entry point
+│   ├── components.py
+│   ├── engine.py
+│   ├── state.py
+│   ├── properties_panel.py
+│   ├── visualization.py
+│   └── tests/              # Unit test versi ini
+│
+└── v2-worktree/            # Git worktree untuk branch v2-improve
+    └── ...                 # (sama seperti struktur root, branch terpisah)
 ```
 
-Saat dibuka, aplikasi mulai dari project kosong. Aksi utama tersedia di panel
-kiri agar tidak bergantung pada menu atas. Gunakan `New Project` untuk
-membersihkan workspace, atau `Load Template` bila ingin memakai template radial
-mirip Four Load Branch:
+---
 
-- 1 external grid / slack bus
-- 1 transformer 10/0.4 kV
-- 4 line
-- 4 load
+## Menjalankan Masing-masing Versi
 
-Klik `Validate Network` untuk memeriksa kelengkapan rangkaian, lalu `Run Power
-Flow` untuk menjalankan aliran daya.
-
-## Interaksi Utama
-
-- Tambahkan komponen dari panel kiri: `Tambah Bus`, `Tambah Generator`,
-  `Tambah Transformer`, `Tambah Shunt`, dan `Tambah Load`. Menu atas tetap
-  tersedia sebagai shortcut tambahan.
-- Jalankan alur utama dari panel kiri bagian `Analisis`: `Validasi Jaringan`,
-  `Jalankan Power Flow`, dan `Edit Saluran Dipilih`.
-- Klik node untuk mengedit nama dan parameter komponennya. Panel kanan juga
-  menampilkan spesifikasi detail, koneksi, dan hasil power-flow terakhir.
-- Hubungkan bus ke bus untuk membuat line.
-- Pilih link bus-to-bus di node editor, lalu klik `Edit Selected Line` untuk
-  mengedit parameter saluran dan melihat hasil aliran dayanya.
-- Hubungkan load, generator, dan shunt ke bus.
-- Hubungkan transformer melalui pin HV dan LV.
-- Gunakan `Save Project` dan `Load Project` untuk menyimpan atau memuat
-  `grid_project.json` di folder aplikasi.
-- Gunakan `Export Results` setelah simulasi untuk menulis `node_results.csv`,
-  `link_results.csv`, dan `project_snapshot.json` ke folder `exports`.
-
-## Test Headless
+### Versi 1 — `web-prototype` (Desktop App pywebview + SVG)
 
 ```powershell
-python -m unittest discover -s tests -v
+python -m pip install pywebview pandapower
+python web-prototype/main.py
 ```
 
-Test fokus pada konversi state aplikasi ke network pandapower dan validasi
-kasus dasar tanpa membuka GUI.
-
-## Build `.exe` dengan CMake
+### Versi 2 — `web-legacy-ui` (Web Server Lokal)
 
 ```powershell
-cmake -S . -B cmake-build
-cmake --build cmake-build
+python -m pip install pandapower
+python web-legacy-ui/server.py
+# Buka browser ke http://127.0.0.1:8765/
 ```
 
-Output default:
+### Versi 3 — `legacy_dpg` (Dear PyGui Desktop)
 
 ```powershell
-.\cmake-build\dist\GridSimulator.exe
+python -m pip install dearpygui pandapower
+python legacy_dpg/demo.py
 ```
 
-Build ini memakai virtual environment lokal di `cmake-build\.venv` dan
-PyInstaller. Secara default executable dibuat sebagai satu file `.exe` tanpa
-console window. Jika ingin mode folder, jalankan konfigurasi seperti ini:
+---
+
+## Menjalankan Unit Test
+
+### Test untuk `web-prototype`
 
 ```powershell
-cmake -S . -B cmake-build -DGRID_SIMULATOR_ONEFILE=OFF
-cmake --build cmake-build
+python -m unittest discover -s web-prototype/tests -v
+```
+
+### Test untuk `web-legacy-ui`
+
+```powershell
+python -m unittest discover -s web-legacy-ui/tests -v
+```
+
+### Test untuk `legacy_dpg`
+
+```powershell
+python -m unittest discover -s legacy_dpg/tests -v
+```
+
+---
+
+## Tentang `v2-worktree`
+
+Folder `v2-worktree/` adalah **Git Worktree** untuk branch `v2-improve`. Ini memungkinkan pengembangan branch tersebut di folder tersendiri tanpa perlu berpindah branch di direktori utama.
+
+```powershell
+# Untuk masuk dan bekerja di v2-improve:
+cd v2-worktree
+git status  # branch: v2-improve
 ```

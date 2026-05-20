@@ -138,9 +138,9 @@ class Api:
             return {"ok": False, "message": str(e)}
 
 def main():
-    # Find absolute path of index.html in web-prototype folder
+    # Find absolute path of index.html in the same folder as this script
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    html_path = os.path.join(base_dir, "web-prototype", "index.html")
+    html_path = os.path.join(base_dir, "index.html")
     
     api = Api()
     

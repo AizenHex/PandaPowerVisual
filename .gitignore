@@ -12,6 +12,11 @@ build/
 cmake-build/
 exports/
 node_modules/
+.Arsip/
+scripts/
+tests/
+GridSimulator.exe
+CMakeLists.txt
 
 # Zip files
 *.zip

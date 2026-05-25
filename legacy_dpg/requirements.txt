@@ -1,3 +1,0 @@
-dearpygui
-pandapower
-PySide6

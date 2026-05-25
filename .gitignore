@@ -29,3 +29,5 @@ legacy_dpg/scripts/
 legacy_dpg/tests/test_canvas_logic.py
 legacy_dpg/tests/test_qt_canvas.py
 legacy_dpg/tests/test_qt_model.py
+
+.Arsip

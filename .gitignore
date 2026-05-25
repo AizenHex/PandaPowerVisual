@@ -6,6 +6,7 @@ __pycache__/
 
 # Build and IDE files
 .vscode/
+.cursor/
 .claude/
 build/
 cmake-build/
@@ -19,3 +20,12 @@ node_modules/
 .worktrees/
 worktree-*/
 v2-worktree/
+
+# Local migration/reference artifacts
+legacy_dpg/.ARSIP/
+legacy_dpg/scripts/
+
+# PySide draft tests kept local; core branch only tracks the main app files
+legacy_dpg/tests/test_canvas_logic.py
+legacy_dpg/tests/test_qt_canvas.py
+legacy_dpg/tests/test_qt_model.py

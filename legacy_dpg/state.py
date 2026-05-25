@@ -15,6 +15,9 @@ links: dict = {}
 # link_tag -> parameter saluran listrik untuk koneksi bus-to-bus.
 line_data: dict = {}
 
+# link_tag -> list[tuple[float, float]] (manual line waypoint coordinates)
+link_waypoints: dict = {}
+
 LINE_DEFAULTS = {
     "label": "Line",
     "length_km": 0.05,
@@ -109,6 +112,7 @@ def push_undo(positions: dict | None = None):
         "nodes": copy.deepcopy(nodes),
         "links": copy.deepcopy(links),
         "line_data": copy.deepcopy(line_data),
+        "link_waypoints": copy.deepcopy(link_waypoints),
         "attr_to_node": copy.deepcopy(attr_to_node),
         "attr_role": copy.deepcopy(attr_role),
         "counters": copy.deepcopy(_counters),
@@ -137,6 +141,7 @@ def reset():
     nodes.clear()
     links.clear()
     line_data.clear()
+    link_waypoints.clear()
     pp_element_map.clear()
     attr_to_node.clear()
     attr_role.clear()

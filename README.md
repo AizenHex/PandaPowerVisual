@@ -1,37 +1,51 @@
 # PANDAPOWER VISUALIZATION
 
-Folder ini berisi kode utama aplikasi desktop PySide6/QGraphicsView untuk
-visualisasi jaringan listrik dan simulasi power flow pandapower.
+PANDAPOWER VISUALIZATION is a desktop application for drawing an electrical
+network and running a pandapower power-flow simulation from the visual model.
 
-## File Utama
+The current version uses PySide6 and `QGraphicsView` for the interactive canvas.
+The main goal of this project is to make the relationship between buses, loads,
+generators, transformers, external grids, and lines easier to inspect in a
+student report or classroom demonstration.
+
+## Main Files
 
 ```text
-legacy_dpg/
-|-- demo.py          # Entry point aplikasi dan smoke test power flow
-|-- engine.py        # Validasi model, konversi state ke pandapower, run power flow
-|-- state.py         # State global node, link, hasil, selection, dan undo
-|-- canvas_logic.py  # Helper matematis untuk zoom, pan, bounds, dan spawn node
-|-- qt_app.py        # Window utama, toolbar, panel kiri/kanan, validasi, export
-|-- qt_canvas.py     # Canvas QGraphicsView, node visual, link, drag port, zoom/pan
-|-- qt_model.py      # Adapter GUI-neutral untuk membuat node, link, save/load project
-|-- requirements.txt # Dependency untuk menjalankan aplikasi dari folder ini
+.
+|-- demo.py              # Application entry point and smoke-test runner
+|-- engine.py            # Model validation, pandapower network builder, power-flow runner
+|-- state.py             # Shared application state for nodes, links, results, selection, and undo
+|-- canvas_logic.py      # Math helpers for zooming, panning, bounds, and node placement
+|-- qt_app.py            # Main window, toolbar, side panels, validation, import/export actions
+|-- qt_canvas.py         # QGraphicsView canvas, visual nodes, links, dragging, zooming, and panning
+|-- qt_model.py          # GUI-neutral adapter for node/link creation, save/load, and export logic
+|-- requirements.txt     # Python dependencies required to run the application
 ```
 
-## Menjalankan Dari Folder Ini
+## Installation
+
+Install the required dependencies:
 
 ```powershell
 python -m pip install -r requirements.txt
+```
+
+## Running the Application
+
+Start the desktop application:
+
+```powershell
 python demo.py
 ```
 
-Smoke test power flow tanpa membuka window:
+Run the smoke test without opening the window:
 
 ```powershell
 python demo.py --smoke-power-flow
 ```
 
-## Catatan
+## Notes
 
-`README.md` dan `requirements.txt` juga ada di root repo. File di folder ini
-dibuat supaya `legacy_dpg/` tetap bisa dibaca sebagai folder aplikasi utama
-tanpa harus naik ke root project.
+The project name is written as **PANDAPOWER VISUALIZATION**. The application
+still contains a few older Dear PyGUI source files, but the main maintained
+interface is the PySide6/Qt implementation.

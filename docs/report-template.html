@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Laporan Hasil Simulasi Power Flow</title>
+  <style>
+    :root {
+      --page: #e9eceb;
+      --paper: #ffffff;
+      --ink: #15191b;
+      --muted: #5f686b;
+      --line: #cfd6d8;
+      --line-dark: #8f999d;
+      --soft: #f0f3f3;
+      --panel: #f7f8f8;
+      --deep: #20282b;
+      --blue: #245f82;
+      --green: #26734d;
+      --green-soft: #eaf4ee;
+      --yellow: #8a6400;
+      --yellow-soft: #fbf1d2;
+      --red: #a43a33;
+      --red-soft: #f8e5e2;
+      --radius: 3px;
+      --mono: "Cascadia Mono", "Consolas", monospace;
+      --sans: "Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font-family: var(--sans);
+      line-height: 1.45;
+    }
+
+    .report-shell {
+      max-width: 1120px;
+      margin: 24px auto;
+      padding: 0 24px 48px;
+    }
+
+    .report {
+      background: var(--paper);
+      border: 1px solid var(--line-dark);
+    }
+
+    .cover-band {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 28px;
+      padding: 30px 38px 24px;
+      border-bottom: 3px solid var(--deep);
+      background: #ffffff;
+      color: var(--ink);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--blue);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 720px;
+      font-size: 31px;
+      line-height: 1.12;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .cover-copy {
+      max-width: 680px;
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .status-card {
+      align-self: start;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 14px;
+      border-radius: var(--radius);
+    }
+
+    .status-card strong {
+      display: block;
+      margin-bottom: 10px;
+      color: var(--deep);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 8px;
+      border: 1px solid #b8d8c5;
+      border-radius: var(--radius);
+      background: var(--green-soft);
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .metadata-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 18px;
+      margin-top: 16px;
+      color: var(--ink);
+      font-size: 12px;
+    }
+
+    .metadata-grid span {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .content {
+      padding: 28px 38px 38px;
+    }
+
+    .section {
+      margin-top: 30px;
+    }
+
+    .section:first-child {
+      margin-top: 0;
+    }
+
+    .section-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 14px;
+      border-bottom: 2px solid var(--deep);
+      padding-bottom: 10px;
+    }
+
+    h2 {
+      margin: 0;
+      color: var(--deep);
+      font-size: 18px;
+      line-height: 1.2;
+      font-weight: 780;
+      letter-spacing: 0;
+    }
+
+    .section-kicker {
+      color: var(--muted);
+      font-size: 12px;
+      font-family: var(--mono);
+      white-space: nowrap;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .metric {
+      min-height: 104px;
+      padding: 15px 16px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .metric:nth-child(4n) {
+      border-right: 0;
+    }
+
+    .metric:nth-last-child(-n + 4) {
+      border-bottom: 0;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .metric-value {
+      margin-top: 8px;
+      font-size: 24px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .metric-unit {
+      margin-left: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .metric-note {
+      margin-top: 9px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric.is-good {
+      background: var(--green-soft);
+      border-top: 2px solid var(--green);
+    }
+
+    .metric.is-warn {
+      background: var(--yellow-soft);
+      border-top: 2px solid var(--yellow);
+    }
+
+    .metric.is-info {
+      border-top: 2px solid var(--blue);
+    }
+
+    .diagram-frame {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #151818;
+    }
+
+    .diagram-frame img {
+      display: block;
+      width: 100%;
+      max-height: 520px;
+      object-fit: contain;
+      border-radius: 4px;
+      background: #161616;
+    }
+
+    .diagram-placeholder {
+      display: grid;
+      min-height: 330px;
+      place-items: center;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 2px;
+      color: #cdd8d5;
+      text-align: center;
+    }
+
+    .diagram-placeholder strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #ffffff;
+      font-size: 16px;
+    }
+
+    .caption {
+      margin: 10px 2px 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-style: italic;
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .chart-panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #ffffff;
+      padding: 16px;
+    }
+
+    .chart-panel.wide {
+      grid-column: 1 / -1;
+    }
+
+    .chart-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .chart-title h3 {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .chart-title span {
+      color: var(--muted);
+      font-size: 11px;
+      font-family: var(--mono);
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 108px minmax(0, 1fr) 62px;
+      gap: 10px;
+      align-items: center;
+      margin: 9px 0;
+      font-size: 12px;
+    }
+
+    .bar-label {
+      overflow: hidden;
+      color: var(--ink);
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .bar-track {
+      position: relative;
+      height: 10px;
+      overflow: hidden;
+      border-radius: 2px;
+      background: var(--soft);
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: var(--green);
+    }
+
+    .bar-fill.warn {
+      background: var(--yellow);
+    }
+
+    .bar-fill.danger {
+      background: var(--red);
+    }
+
+    .bar-fill.info {
+      background: var(--blue);
+    }
+
+    .bar-value {
+      color: var(--muted);
+      font-family: var(--mono);
+      text-align: right;
+    }
+
+    .loss-bars {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .loss-block {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #ffffff;
+    }
+
+    .loss-block b {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+
+    .loss-block strong {
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .loss-block span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .notes-grid {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 18px;
+    }
+
+    .note-box,
+    .validation-box {
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--green);
+      border-radius: var(--radius);
+      padding: 16px;
+      background: #ffffff;
+    }
+
+    .validation-box {
+      border-left-color: var(--yellow);
+    }
+
+    .note-box h3,
+    .validation-box h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+
+    .note-box p,
+    .validation-box p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--paper);
+      font-size: 12px;
+    }
+
+    th {
+      background: var(--deep);
+      color: #f8fbfa;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-align: left;
+      text-transform: uppercase;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #f7f8f8;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .num {
+      font-family: var(--mono);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 7px;
+      border-radius: 2px;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .tag.good {
+      background: var(--green-soft);
+      color: var(--green);
+    }
+
+    .tag.warn {
+      background: var(--yellow-soft);
+      color: var(--yellow);
+    }
+
+    .tag.danger {
+      background: var(--red-soft);
+      color: var(--red);
+    }
+
+    .tag.info {
+      background: #dcecf6;
+      color: var(--blue);
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding-top: 20px;
+      border-top: 2px solid var(--deep);
+      color: var(--muted);
+      font-size: 11px;
+      font-family: var(--mono);
+    }
+
+    @media (max-width: 860px) {
+      .report-shell {
+        margin: 0;
+        padding: 0;
+      }
+
+      .report {
+        border: 0;
+        box-shadow: none;
+      }
+
+      .cover-band,
+      .content {
+        padding-left: 20px;
+        padding-right: 20px;
+      }
+
+      .cover-band,
+      .charts-grid,
+      .notes-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .metric:nth-child(2n) {
+        border-right: 0;
+      }
+
+      .metric:nth-last-child(-n + 4) {
+        border-bottom: 1px solid var(--line);
+      }
+
+      .metric:nth-last-child(-n + 2) {
+        border-bottom: 0;
+      }
+
+      .section-heading {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .section-kicker {
+        white-space: normal;
+      }
+
+      h1 {
+        font-size: 28px;
+      }
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+      }
+
+      .report-shell {
+        max-width: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .report {
+        border: 0;
+        box-shadow: none;
+      }
+
+      .cover-band {
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+
+      .section {
+        break-inside: avoid;
+      }
+
+      .chart-panel,
+      .table-wrap,
+      .note-box,
+      .validation-box,
+      .diagram-frame {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="report-shell">
+    <article class="report">
+      <header class="cover-band">
+        <div>
+          <p class="eyebrow">Pandapower Visualization</p>
+          <h1>Laporan Hasil Simulasi Power Flow</h1>
+          <p class="cover-copy">
+            Ringkasan teknis rangkaian, profil tegangan, loading saluran, rugi-rugi,
+            dan catatan validasi dari model jaringan listrik yang disimulasikan.
+          </p>
+        </div>
+        <aside class="status-card" aria-label="Status simulasi">
+          <strong>Status Simulasi</strong>
+          <span class="status-pill"><span class="status-dot"></span>Konvergen</span>
+          <div class="metadata-grid">
+            <div><span>Project</span>Four Load Branch</div>
+            <div><span>Export</span>2026-06-03 21:18</div>
+            <div><span>Solver</span>pandapower</div>
+            <div><span>Revision</span>model r14</div>
+          </div>
+        </aside>
+      </header>
+
+      <div class="content">
+        <section class="section" aria-labelledby="summary-title">
+          <div class="section-heading">
+            <h2 id="summary-title">Ringkasan Jaringan</h2>
+            <span class="section-kicker">simulation_summary</span>
+          </div>
+
+          <div class="summary-grid">
+            <div class="metric is-info">
+              <div class="metric-label">Buses</div>
+              <div class="metric-value">6</div>
+              <div class="metric-note">1 slack bus</div>
+            </div>
+            <div class="metric is-info">
+              <div class="metric-label">Loads</div>
+              <div class="metric-value">4</div>
+              <div class="metric-note">Total connected loads</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Total Load</div>
+              <div class="metric-value">0.1200<span class="metric-unit">MW</span></div>
+              <div class="metric-note">Active demand</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Grid Power</div>
+              <div class="metric-value">0.1248<span class="metric-unit">MW</span></div>
+              <div class="metric-note">External grid supply</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Line Loss</div>
+              <div class="metric-value">3.842<span class="metric-unit">kW</span></div>
+              <div class="metric-note">Total line losses</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Trafo Loss</div>
+              <div class="metric-value">0.921<span class="metric-unit">kW</span></div>
+              <div class="metric-note">Transformer losses</div>
+            </div>
+            <div class="metric is-good">
+              <div class="metric-label">Minimum Voltage</div>
+              <div class="metric-value">0.9821<span class="metric-unit">pu</span></div>
+              <div class="metric-note">Within operating range</div>
+            </div>
+            <div class="metric is-warn">
+              <div class="metric-label">Maximum Loading</div>
+              <div class="metric-value">78.4<span class="metric-unit">%</span></div>
+              <div class="metric-note">Near monitoring threshold</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="diagram-title">
+          <div class="section-heading">
+            <h2 id="diagram-title">Diagram Rangkaian</h2>
+            <span class="section-kicker">diagram_image</span>
+          </div>
+
+          <figure>
+            <div class="diagram-frame">
+              <!-- Replace this placeholder with: <img src="diagram.png" alt="Diagram rangkaian simulasi"> -->
+              <div class="diagram-placeholder">
+                <div>
+                  <strong>Slot Gambar Canvas</strong>
+                  <span>Python report engine akan mengganti bagian ini dengan export PNG rangkaian.</span>
+                </div>
+              </div>
+            </div>
+            <figcaption class="caption">
+              Gambar 1. Diagram rangkaian yang digunakan pada simulasi power flow.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section class="section" aria-labelledby="chart-title">
+          <div class="section-heading">
+            <h2 id="chart-title">Grafik Hasil Simulasi</h2>
+            <span class="section-kicker">charts</span>
+          </div>
+
+          <div class="charts-grid">
+            <div class="chart-panel">
+              <div class="chart-title">
+                <h3>Voltage Profile</h3>
+                <span>pu</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-label">Ext Grid</span>
+                <span class="bar-track"><span class="bar-fill info" style="width: 100%"></span></span>
+                <span class="bar-value">1.0000</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-label">Bus 1</span>
+                <span class="bar-track"><span class="bar-fill" style="width: 99%"></span></span>
+                <span class="bar-value">0.9948</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-label">Bus 2</span>
+                <span class="bar-track"><span class="bar-fill" style="width: 98%"></span></span>
+                <span class="bar-value">0.9895</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-label">Bus 3</span>
+                <span class="bar-track"><span class="bar-fill" style="width: 98%"></span></span>
+                <span class="bar-value">0.9862</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-label">Bus 4</span>
+                <span class="bar-track"><span class="bar-fill" style="width: 98%"></span></span>
+                <span class="bar-value">0.9834</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-label">Bus 5</span>
+                <span class="bar-track"><span class="bar-fill" style="width: 98%"></span></span>
+                <span class="bar-value">0.9821</span>
+              </div>
+            </div>
+
+            <div class="chart-panel">
+              <div class="chart-title">
+                <h3>Line and Transformer Loading</h3>
+                <span>%</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-label">Trafo 10/0.4</span>
+                <span class="bar-track"><span class="bar-fill warn" style="width: 78%"></span></span>
+                <span class="bar-value">78.4</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-label">Line 1</span>
+                <span class="bar-track"><span class="bar-fill" style="width: 61%"></span></span>
+                <span class="bar-value">61.2</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-label">Line 2</span>
+                <span class="bar-track"><span class="bar-fill" style="width: 42%"></span></span>
+                <span class="bar-value">42.6</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-label">Line 3</span>
+                <span class="bar-track"><span class="bar-fill" style="width: 28%"></span></span>
+                <span class="bar-value">28.9</span>
+              </div>
+              <div class="bar-row">
+                <span class="bar-label">Line 4</span>
+                <span class="bar-track"><span class="bar-fill" style="width: 15%"></span></span>
+                <span class="bar-value">15.1</span>
+              </div>
+            </div>
+
+            <div class="chart-panel wide">
+              <div class="chart-title">
+                <h3>Loss Breakdown</h3>
+                <span>kW</span>
+              </div>
+              <div class="loss-bars">
+                <div class="loss-block">
+                  <b>Line Losses</b>
+                  <strong>3.842</strong>
+                  <span>kW from feeder lines</span>
+                </div>
+                <div class="loss-block">
+                  <b>Transformer Losses</b>
+                  <strong>0.921</strong>
+                  <span>kW from transformer model</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="notes-title">
+          <div class="section-heading">
+            <h2 id="notes-title">Engineering Notes</h2>
+            <span class="section-kicker">rule_based_notes</span>
+          </div>
+
+          <div class="notes-grid">
+            <div class="note-box">
+              <h3>Kondisi Operasi</h3>
+              <p>
+                Simulasi berada dalam batas operasi dasar. Tegangan minimum masih
+                di atas 0.95 pu dan tidak ada line atau trafo yang melewati 100%
+                loading.
+              </p>
+            </div>
+            <div class="validation-box">
+              <h3>Catatan Validasi</h3>
+              <p>
+                Model valid, hasil power flow tidak stale, dan snapshot diagram
+                dibuat dari canvas aktif saat laporan diekspor.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="branch-title">
+          <div class="section-heading">
+            <h2 id="branch-title">Tabel Hasil Saluran dan Trafo</h2>
+            <span class="section-kicker">branch_results</span>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Komponen</th>
+                  <th>Tipe</th>
+                  <th class="num">P</th>
+                  <th class="num">Q</th>
+                  <th class="num">Loss</th>
+                  <th class="num">Loading</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Trafo 10/0.4</td>
+                  <td>trafo</td>
+                  <td class="num">+0.1248 MW</td>
+                  <td class="num">+0.0431 MVAr</td>
+                  <td class="num">0.921 kW</td>
+                  <td class="num">78.4%</td>
+                  <td><span class="tag warn">Monitor</span></td>
+                </tr>
+                <tr>
+                  <td>Line 1</td>
+                  <td>line</td>
+                  <td class="num">+0.0912 MW</td>
+                  <td class="num">+0.0308 MVAr</td>
+                  <td class="num">1.623 kW</td>
+                  <td class="num">61.2%</td>
+                  <td><span class="tag good">Normal</span></td>
+                </tr>
+                <tr>
+                  <td>Line 2</td>
+                  <td>line</td>
+                  <td class="num">+0.0604 MW</td>
+                  <td class="num">+0.0201 MVAr</td>
+                  <td class="num">1.034 kW</td>
+                  <td class="num">42.6%</td>
+                  <td><span class="tag good">Normal</span></td>
+                </tr>
+                <tr>
+                  <td>Line 3</td>
+                  <td>line</td>
+                  <td class="num">+0.0302 MW</td>
+                  <td class="num">+0.0100 MVAr</td>
+                  <td class="num">0.721 kW</td>
+                  <td class="num">28.9%</td>
+                  <td><span class="tag good">Normal</span></td>
+                </tr>
+                <tr>
+                  <td>Line 4</td>
+                  <td>line</td>
+                  <td class="num">+0.0150 MW</td>
+                  <td class="num">+0.0050 MVAr</td>
+                  <td class="num">0.464 kW</td>
+                  <td class="num">15.1%</td>
+                  <td><span class="tag good">Normal</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="bus-title">
+          <div class="section-heading">
+            <h2 id="bus-title">Tabel Tegangan Bus</h2>
+            <span class="section-kicker">bus_results</span>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Bus</th>
+                  <th class="num">V Nominal</th>
+                  <th class="num">V pu</th>
+                  <th class="num">Angle</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Ext Grid</td>
+                  <td class="num">10.0 kV</td>
+                  <td class="num">1.0000</td>
+                  <td class="num">0.00 deg</td>
+                  <td><span class="tag info">Slack</span></td>
+                </tr>
+                <tr>
+                  <td>Bus 1</td>
+                  <td class="num">0.4 kV</td>
+                  <td class="num">0.9948</td>
+                  <td class="num">-0.42 deg</td>
+                  <td><span class="tag good">Normal</span></td>
+                </tr>
+                <tr>
+                  <td>Bus 2</td>
+                  <td class="num">0.4 kV</td>
+                  <td class="num">0.9895</td>
+                  <td class="num">-0.81 deg</td>
+                  <td><span class="tag good">Normal</span></td>
+                </tr>
+                <tr>
+                  <td>Bus 5</td>
+                  <td class="num">0.4 kV</td>
+                  <td class="num">0.9821</td>
+                  <td class="num">-1.43 deg</td>
+                  <td><span class="tag good">Normal</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <footer class="footer">
+          <span>PANDAPOWER VISUALIZATION - HTML report template</span>
+          <span>Generated from simulation snapshot</span>
+        </footer>
+      </div>
+    </article>
+  </main>
+</body>
+</html>

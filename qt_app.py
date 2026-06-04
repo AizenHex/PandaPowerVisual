@@ -46,6 +46,7 @@ from PySide6.QtWidgets import (
 
 import engine
 import qt_model
+import report_export
 import state
 from qt_canvas import GridScene, GridView
 
@@ -1314,6 +1315,7 @@ class MainWindow(QMainWindow):
         g.add_btn("RUN POWER FLOW", self.run_power_flow, color=GREEN, bold=True)
         g.add_btn("VALIDASI",   self.validate_network, color=BLUE)
         g.add_btn("EXPORT PNG",  self.export_canvas_image, color=PURPLE)
+        g.add_btn("EXPORT REPORT", self.export_report, color=ACCENT)
         rl.addWidget(g)
 
         rl.addStretch(1)
@@ -1351,6 +1353,7 @@ class MainWindow(QMainWindow):
         self._side_btn(lo, "SIMPAN PROJECT",       self.save_project)
         self._side_btn(lo, "BUKA PROJECT",         self.load_project)
         self._side_btn(lo, "EKSPOR HASIL",         self.export_results)
+        self._side_btn(lo, "EKSPOR LAPORAN",       self.export_report)
         lo.addSpacing(4)
         self._side_btn(lo, "UNDO (Ctrl+Z)",        self.undo)
 
@@ -1789,6 +1792,31 @@ class MainWindow(QMainWindow):
             self.set_status("Belum ada hasil.", error=True); return
         self.set_status("Diekspor ke exports/")
 
+    def export_report(self) -> None:
+        """Mengekspor laporan HTML lengkap dari hasil power flow terakhir."""
+        problem = report_export.validate_report_ready()
+        if problem:
+            self.set_status(problem, error=True)
+            return
+        default_path = qt_model.EXPORT_DIR / "simulation_report.html"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Laporan Simulasi", str(default_path),
+            "HTML Files (*.html);;All Files (*)")
+        if not path:
+            return
+        report_path = Path(path)
+        diagram_path = report_path.with_name(f"{report_path.stem}_diagram.png")
+        try:
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            if not self._render_canvas_image(diagram_path):
+                self.set_status("Canvas kosong.", error=True)
+                return
+            report_export.write_report(report_path, diagram_path.name, project_name=report_path.stem)
+        except OSError as exc:
+            self.set_status(f"Gagal export laporan: {exc}", error=True)
+            return
+        self.set_status(f"Laporan disimpan: {report_path.name}")
+
     # ── status ────────────────────────────────────────────────────────
 
     def set_status(self, text: str, error: bool = False, warn: bool = False) -> None:
@@ -1820,6 +1848,14 @@ class MainWindow(QMainWindow):
         # Jika user menekan Cancel, path kosong dan fungsi berhenti.
         if not path:
             return
+        if not self._render_canvas_image(Path(path)):
+            self.set_status("Canvas kosong.", error=True)
+            return
+        # Status sukses menampilkan nama file, bukan path penuh, agar ringkas.
+        self.set_status(f"Disimpan: {Path(path).name}")
+
+    def _render_canvas_image(self, path: Path) -> bool:
+        """Merender scene aktif ke PNG dan mengembalikan False jika canvas kosong."""
         # Selection dibersihkan supaya border seleksi tidak ikut tersimpan di gambar.
         self.canvas_scene.clearSelection()
         # Export canvas memakai render scene langsung agar output sama dengan yang terlihat.
@@ -1828,9 +1864,7 @@ class MainWindow(QMainWindow):
         rect = self.canvas_scene.itemsBoundingRect().adjusted(-50, -50, 50, 50)
         # Kalau rect kosong berarti tidak ada item yang bisa diekspor.
         if rect.isEmpty():
-            # Status error memberi tahu user bahwa canvas belum berisi diagram.
-            self.set_status("Canvas kosong.", error=True)
-            return
+            return False
         # QImage diimport lokal karena hanya dipakai saat export PNG.
         from PySide6.QtGui import QImage
         # scale 2.0 membuat gambar 2x lebih tajam dari ukuran scene asli.
@@ -1856,9 +1890,7 @@ class MainWindow(QMainWindow):
         # Painter harus ditutup sebelum image disimpan supaya buffer selesai ditulis.
         painter.end()
         # Simpan bitmap ke path yang dipilih user.
-        image.save(path)
-        # Status sukses menampilkan nama file, bukan path penuh, agar ringkas.
-        self.set_status(f"Disimpan: {Path(path).name}")
+        return image.save(str(path))
 
     def update_zoom_label(self, z: float) -> None:
         self.zoom_label.setText(f"{int(round(z * 100))}%")

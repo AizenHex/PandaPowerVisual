@@ -36,3 +36,4 @@ legacy_dpg/tests/test_qt_canvas.py
 legacy_dpg/tests/test_qt_model.py
 
 .Arsip
+archive/

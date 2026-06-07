@@ -4,6 +4,24 @@
 
 Membuat fitur export laporan otomatis yang menggabungkan diagram rangkaian dan hasil simulasi power flow menjadi satu dokumen rapi. Fitur ini ditujukan untuk laporan praktikum, dokumentasi proyek, dan presentasi hasil simulasi.
 
+## Status Implementasi Saat Ini
+
+PoC **Export Report HTML** sudah masuk ke aplikasi utama.
+
+Yang sudah tersedia di repo saat ini:
+
+- `qt_app.py` sudah punya aksi `EXPORT REPORT`.
+- Export laporan menghasilkan file HTML dan file PNG diagram pendamping di folder yang sama.
+- `report_export.py` sudah membangun HTML report dari `state.last_results` dan template `docs/report-template.html`.
+- Export menolak kondisi tanpa hasil power flow atau hasil yang sudah stale.
+- Tombol `Print / Save PDF` sudah tersedia di HTML agar user bisa menyimpan PDF lewat browser.
+
+Yang masih belum ada:
+
+- Smoke test headless khusus untuk jalur report export.
+- Export PDF native langsung dari aplikasi.
+- Test otomatis untuk struktur `report_data` dan section penting pada HTML.
+
 ## Asumsi
 
 - Aplikasi utama yang dikembangkan adalah versi PySide6/Qt, bukan Dear PyGUI lama.
@@ -23,17 +41,21 @@ Membuat fitur export laporan otomatis yang menggabungkan diagram rangkaian dan h
 
 ## Kondisi Saat Ini
 
-Aplikasi sudah punya beberapa pondasi:
+Aplikasi sekarang sudah melewati tahap pondasi dan sudah memiliki implementasi PoC pertama. Komponen yang relevan saat ini:
 
 - `qt_app.py` punya tombol `EXPORT PNG` untuk menyimpan gambar canvas.
-- `qt_app.py` punya tombol `EKSPOR HASIL` untuk export hasil power flow.
+- `qt_app.py` punya tombol `EKSPOR HASIL` untuk export hasil power flow ke CSV/snapshot.
+- `qt_app.py` punya tombol `EXPORT REPORT` untuk membuat laporan HTML lengkap.
 - `qt_model.export_results()` sudah menulis `node_results.csv`, `link_results.csv`, dan `project_snapshot.json`.
 - `engine._collect_results()` sudah memetakan hasil pandapower kembali ke node/link UI.
-- `qt_app._summary()` sudah membuat ringkasan total jaringan.
+- `qt_app._summary()` sudah membuat ringkasan total jaringan untuk panel analisis.
+- `report_export.build_report_data()` sudah mengubah state aktif menjadi struktur data laporan yang netral terhadap GUI.
 
-Kekurangannya: export masih terpisah-pisah dan belum membentuk satu laporan yang enak dibaca.
+Gap utamanya sekarang bukan lagi "belum ada laporan", tetapi verifikasi otomatis dan opsi format lanjutan.
 
 ## Rekomendasi PoC
+
+Status rekomendasi ini sudah **tereksekusi** sebagai baseline implementasi.
 
 Bangun fitur **Export Report HTML** terlebih dahulu.
 
@@ -96,7 +118,7 @@ Kekurangan:
 - Bukan format final yang paling formal untuk dikumpulkan.
 - User perlu browser untuk membuka.
 
-Rekomendasi: pakai ini untuk PoC.
+Status: sudah dipakai untuk PoC saat ini.
 
 ### Opsi 2 - PDF Langsung dari Qt
 
@@ -113,7 +135,7 @@ Kekurangan:
 - Lebih rawan hasil berantakan.
 - Butuh lebih banyak effort untuk styling.
 
-Rekomendasi: tahap kedua setelah struktur laporan stabil.
+Rekomendasi: tetap menjadi tahap kedua setelah struktur HTML benar-benar stabil.
 
 ### Opsi 3 - DOCX Report
 
@@ -129,7 +151,7 @@ Kekurangan:
 - Butuh dependency tambahan seperti `python-docx`.
 - Styling tabel dan gambar perlu diuji lagi.
 
-Rekomendasi: opsional jika laporan memang perlu diedit manual.
+Rekomendasi: tetap opsional jika laporan memang perlu diedit manual.
 
 ## Struktur Laporan
 
@@ -373,6 +395,8 @@ Rencana file:
 
 ### Tahap 1 - Data Report
 
+Status: selesai untuk PoC saat ini.
+
 Target:
 
 - Membuat struktur data laporan dari state dan hasil simulasi.
@@ -384,6 +408,8 @@ Verifikasi:
 - Data report memuat ringkasan, komponen, dan hasil.
 
 ### Tahap 2 - HTML Report
+
+Status: selesai untuk PoC saat ini.
 
 Target:
 
@@ -400,6 +426,8 @@ Verifikasi:
 
 ### Tahap 3 - Integrasi UI
 
+Status: selesai untuk PoC saat ini.
+
 Target:
 
 - Tambah tombol `EXPORT REPORT`.
@@ -414,6 +442,8 @@ Verifikasi:
 
 ### Tahap 4 - PDF Optional
 
+Status: belum dikerjakan.
+
 Target:
 
 - Tambah export PDF jika HTML sudah stabil.
@@ -426,7 +456,7 @@ Pilihan:
 
 ## Rekomendasi Final
 
-Mulai dari **Export Report HTML** sebagai PoC.
+Pertahankan **Export Report HTML** sebagai baseline yang sudah jalan, lalu prioritaskan verifikasi otomatis sebelum menambah format baru.
 
 Nama fitur di UI:
 
@@ -434,7 +464,11 @@ Nama fitur di UI:
 - Dialog default: `simulation_report.html`
 - Folder default: `exports/`
 
-Setelah PoC HTML disetujui secara visual, baru naik ke PDF atau DOCX. Dengan cara ini, fitur laporan matang dulu dari sisi isi dan struktur sebelum menghabiskan waktu di format final.
+Urutan lanjut yang paling aman:
+
+1. Tambah smoke test atau test headless untuk `build_report_data()` dan HTML output.
+2. Rapikan coverage data jika ada jenis komponen/hasil yang belum terwakili.
+3. Baru pertimbangkan PDF native atau DOCX bila kebutuhan distribusi memang nyata.
 
 ## Standar Kualitas Visual
 

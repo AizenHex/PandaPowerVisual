@@ -46,6 +46,12 @@ Run the smoke test without opening the window:
 python demo.py --smoke-power-flow
 ```
 
+Run the automated test suite:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
 ## Exporting Simulation Reports
 
 After a successful `Run Power Flow`, use the `EXPORT REPORT` action in the Qt

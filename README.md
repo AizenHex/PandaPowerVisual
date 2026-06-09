@@ -21,6 +21,7 @@ student report or classroom demonstration.
 |-- qt_model.py          # GUI-neutral adapter for node/link creation, save/load, and export logic
 |-- report_export.py     # HTML report builder for simulation snapshots
 |-- docs/report-template.html  # Base HTML/CSS template for exported reports
+|-- CMakeLists.txt       # CMake entry point for building the packaged executable with PyInstaller
 |-- requirements.txt     # Python dependencies required to run the application
 ```
 
@@ -50,6 +51,16 @@ Run the automated test suite:
 
 ```powershell
 python -m unittest discover -s tests -v
+```
+
+## Building the Windows Executable
+
+The repository ships a CMake-based packaging flow that creates a PyInstaller
+build from `demo.py` and includes the HTML report template.
+
+```powershell
+cmake -S . -B cmake-build
+cmake --build cmake-build --target grid-simulator-exe --config Release
 ```
 
 ## Exporting Simulation Reports

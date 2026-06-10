@@ -15,12 +15,12 @@ Yang sudah tersedia di repo saat ini:
 - `report_export.py` sudah membangun HTML report dari `state.last_results` dan template `docs/report-template.html`.
 - Export menolak kondisi tanpa hasil power flow atau hasil yang sudah stale.
 - Tombol `Print / Save PDF` sudah tersedia di HTML agar user bisa menyimpan PDF lewat browser.
+- `tests/test_report_export.py` sudah mengecek guard export, struktur `report_data`, dan section penting pada HTML.
 
 Yang masih belum ada:
 
-- Smoke test headless khusus untuk jalur report export.
 - Export PDF native langsung dari aplikasi.
-- Test otomatis untuk struktur `report_data` dan section penting pada HTML.
+- Coverage test yang lebih luas untuk variasi komponen dan jalur tulis file report.
 
 ## Asumsi
 
@@ -51,7 +51,7 @@ Aplikasi sekarang sudah melewati tahap pondasi dan sudah memiliki implementasi P
 - `qt_app._summary()` sudah membuat ringkasan total jaringan untuk panel analisis.
 - `report_export.build_report_data()` sudah mengubah state aktif menjadi struktur data laporan yang netral terhadap GUI.
 
-Gap utamanya sekarang bukan lagi "belum ada laporan", tetapi verifikasi otomatis dan opsi format lanjutan.
+Gap utamanya sekarang bukan lagi "belum ada laporan", tetapi perluasan coverage verifikasi dan opsi format lanjutan.
 
 ## Rekomendasi PoC
 
@@ -466,7 +466,7 @@ Nama fitur di UI:
 
 Urutan lanjut yang paling aman:
 
-1. Tambah smoke test atau test headless untuk `build_report_data()` dan HTML output.
+1. Perluas coverage test untuk variasi komponen, status warning/overload, dan jalur `write_report()`.
 2. Rapikan coverage data jika ada jenis komponen/hasil yang belum terwakili.
 3. Baru pertimbangkan PDF native atau DOCX bila kebutuhan distribusi memang nyata.
 

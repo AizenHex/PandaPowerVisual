@@ -2,10 +2,12 @@
 
 UI features
 -----------
-* **Ribbon toolbar** – grouped buttons with short labels, colour accents per
-  category, group labels below, vertical separators.
+* **Tabbed ribbon (gaya AutoCAD)** – tab BERANDA/KOMPONEN/ANALISIS/EKSPOR/
+  TAMPILAN berisi grup tombol berlabel dengan aksen warna per kategori.
 * **Properties panel** – Unity-style collapsible/accordion sections with
   clear visual separation, clickable ▶/▼ headers.
+* **Result panel** – kartu statistik + tab tabel saluran/trafo, tegangan bus,
+  dan log analisis.
 * **Connection workflow** – drag from port is handled by GridView in
   qt_canvas.py.
 """
@@ -15,10 +17,11 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve, QEvent, QTimer
-from PySide6.QtGui import QAction, QColor, QFont, QPalette, QIcon
+from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QDockWidget,
     QDoubleSpinBox,
     QFileDialog,
@@ -30,12 +33,13 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
-    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
     QSplitter,
+    QStackedWidget,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
@@ -58,7 +62,6 @@ from qt_canvas import GridScene, GridView
 #  Design tokens
 # ═══════════════════════════════════════════════════════════════════════════
 
-LEFT_WIDTH  = 290
 RIGHT_WIDTH = 310
 
 # Palette
@@ -244,6 +247,21 @@ def apply_dark_palette(app: QApplication) -> None:
         QLineEdit:focus, QDoubleSpinBox:focus {{
             border-color: {BLUE};
         }}
+        QComboBox {{
+            background: {BG_0};
+            border: 1px solid {BORDER_2};
+            border-radius: 3px;
+            padding: 4px 8px;
+            color: {TEXT_0};
+        }}
+        QComboBox:focus {{ border-color: {BLUE}; }}
+        QComboBox::drop-down {{ border: none; width: 18px; }}
+        QComboBox QAbstractItemView {{
+            background: {BG_2};
+            border: 1px solid {BORDER_2};
+            selection-background-color: #2d5070;
+            color: {TEXT_0};
+        }}
         QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
             width: 16px; border: none; background: {BG_3};
         }}
@@ -301,6 +319,49 @@ def apply_dark_palette(app: QApplication) -> None:
         }}
 
         QSplitter::handle {{ background: {BORDER_0}; height: 2px; }}
+
+        /* ─── Ribbon tabs (gaya AutoCAD) ─────────────────────────────── */
+        QPushButton[ribbonTab="true"] {{
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            border-radius: 0;
+            padding: 4px 16px;
+            color: {TEXT_2};
+            font-size: 9pt;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }}
+        QPushButton[ribbonTab="true"]:hover {{
+            color: {TEXT_0};
+            background: #1c1c1c;
+        }}
+        QPushButton[ribbonTab="true"]:checked {{
+            color: {ACCENT};
+            border-bottom: 2px solid {ACCENT};
+            background: {BG_2};
+        }}
+
+        /* ─── Bottom result tabs ─────────────────────────────────────── */
+        QTabWidget::pane {{
+            border: 1px solid {BORDER_0};
+            background: {BG_0};
+        }}
+        QTabBar::tab {{
+            background: {BG_1};
+            color: {TEXT_2};
+            border: 1px solid {BORDER_0};
+            border-bottom: none;
+            padding: 5px 14px;
+            font-size: 9pt;
+            letter-spacing: 0.5px;
+        }}
+        QTabBar::tab:hover {{ color: {TEXT_0}; }}
+        QTabBar::tab:selected {{
+            background: {BG_0};
+            color: {ACCENT};
+            border-top: 2px solid {ACCENT};
+        }}
 
         /* ─── QMenu ──────────────────────────────────────────────────── */
         QMenu {{
@@ -634,6 +695,44 @@ class RibbonGroup(QWidget):
         self._row.addWidget(w)
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  StatChip — kartu ringkasan kecil di panel hasil
+# ═══════════════════════════════════════════════════════════════════════════
+
+class StatChip(QFrame):
+    """Kartu kecil berisi satu angka penting (status, rugi, V min, loading)."""
+
+    def __init__(self, title: str, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet(f"""
+            QFrame {{
+                background: {BG_2};
+                border: 1px solid {BORDER_1};
+                border-radius: 4px;
+            }}
+            QLabel {{ background: transparent; border: none; }}
+        """)
+        lo = QVBoxLayout(self)
+        lo.setContentsMargins(12, 6, 12, 6)
+        lo.setSpacing(1)
+        self._value = QLabel("—")
+        self._value.setStyleSheet(
+            f"color: {TEXT_0}; font-size: 11pt; font-weight: 700;")
+        title_lbl = QLabel(title.upper())
+        title_lbl.setStyleSheet(
+            f"color: {TEXT_3}; font-size: 7pt; letter-spacing: 1.2px;")
+        lo.addWidget(self._value)
+        lo.addWidget(title_lbl)
+
+    def set_value(self, text: str, color: str = TEXT_0) -> None:
+        self._value.setText(text)
+        self._value.setStyleSheet(
+            f"color: {color}; font-size: 11pt; font-weight: 700;")
+
+    def reset(self) -> None:
+        self.set_value("—", TEXT_3)
+
+
 ABOUT_COMPONENTS = {
     "bus": {
         "title": "Tentang Bus",
@@ -652,7 +751,10 @@ ABOUT_COMPONENTS = {
         "fields": [
             ("Nama", "Nama unik untuk mengidentifikasi generator ini."),
             ("Daya aktif P", "Daya nyata yang diproduksi oleh generator (dalam MW). Nilai positif menyuplai daya ke jaringan."),
-            ("Daya reaktif Q", "Daya pendukung tegangan yang dihasilkan/diserap oleh generator (dalam MVAr). Nilai positif untuk menyuplai Q, negatif untuk menyerap Q."),
+            ("Daya reaktif Q", "Daya pendukung tegangan yang dihasilkan/diserap oleh generator (dalam MVAr). Nilai positif untuk menyuplai Q, negatif untuk menyerap Q. Hanya dipakai pada mode PQ."),
+            ("Kontrol tegangan (PV)", "Mode PV membuat generator menjaga tegangan bus pada setpoint (pu); Q dihitung otomatis oleh power flow. Mode PQ (default) memakai P dan Q tetap."),
+            ("Setpoint tegangan", "Target tegangan bus saat mode PV aktif, dalam per-unit. Nilai normal: 0.95 s.d. 1.05 pu."),
+            ("Kapasitas", "Rating daya semu generator (MVA), dipakai juga oleh analisis hubung singkat."),
         ]
     },
     "trafo": {
@@ -940,7 +1042,41 @@ class PropertiesPanel(QWidget):
                         lambda v, k=key: self._set_node(node_tag, k, float(v)))
                     self._add_field(sec_edit.inner, key, sp)
 
-        elif kind in ("gen", "load", "shunt"):
+        elif kind == "gen":
+            is_pv = nd.get("ctrl_mode") == "pv"
+            sp = self._spin(float(nd.get("p_mw", 0)))
+            sp.valueChanged.connect(
+                lambda v: self._set_node(node_tag, "p_mw", float(v)))
+            self._add_field(sec_edit.inner, "p_mw", sp)
+
+            cb = QCheckBox("Kontrol tegangan (mode PV)")
+            cb.setChecked(is_pv)
+            cb.setToolTip("PV: Q diatur otomatis untuk menahan tegangan setpoint.\n"
+                          "PQ: P dan Q tetap (static generator).")
+            # Rerender karena mode menentukan field Q atau Vm yang tampil.
+            cb.toggled.connect(
+                lambda v: self._set_node(node_tag, "ctrl_mode",
+                                         "pv" if v else "pq", rerender=True))
+            sec_edit.inner.addSpacing(4)
+            sec_edit.inner.addWidget(cb)
+
+            if is_pv:
+                sp = self._spin(float(nd.get("vm_pu", 1.0)))
+                sp.valueChanged.connect(
+                    lambda v: self._set_node(node_tag, "vm_pu", float(v)))
+                self._add_field(sec_edit.inner, "vm_pu", sp)
+            else:
+                sp = self._spin(float(nd.get("q_mvar", 0)))
+                sp.valueChanged.connect(
+                    lambda v: self._set_node(node_tag, "q_mvar", float(v)))
+                self._add_field(sec_edit.inner, "q_mvar", sp)
+
+            sp = self._spin(float(nd.get("sn_mva", 1.0)))
+            sp.valueChanged.connect(
+                lambda v: self._set_node(node_tag, "sn_mva", float(v)))
+            self._add_field(sec_edit.inner, "sn_mva", sp)
+
+        elif kind in ("load", "shunt"):
             for key in ("p_mw", "q_mvar"):
                 sp = self._spin(float(nd.get(key, 0)))
                 sp.valueChanged.connect(
@@ -1031,12 +1167,30 @@ class PropertiesPanel(QWidget):
             name.editingFinished.connect(
                 lambda: self._set_line(link_tag, "label", name.text()))
             self._add_field(sec_edit.inner, "label", name)
+
+            # Preset tipe kabel dari standard types pandapower (NAYY, NA2XS2Y, dst).
+            preset_lbl = QLabel("Preset tipe kabel (pandapower)")
+            preset_lbl.setStyleSheet(f"color: {TEXT_2}; font-size: 9pt;")
+            sec_edit.inner.addWidget(preset_lbl)
+            combo = QComboBox()
+            combo.addItem("— Manual —")
+            std_types = engine.line_std_types()
+            combo.addItems(sorted(std_types))
+            current = data.get("std_type", "")
+            if current in std_types:
+                combo.setCurrentText(current)
+            combo.currentTextChanged.connect(
+                lambda name_: self._apply_line_std_type(link_tag, name_))
+            sec_edit.inner.addWidget(combo)
+
+            self._line_spins = {}
             for key in ("length_km", "r_ohm_per_km", "x_ohm_per_km",
                         "c_nf_per_km", "max_i_ka"):
                 sp = self._spin(float(data.get(key, 0)))
                 sp.valueChanged.connect(
                     lambda v, k=key: self._set_line(link_tag, k, float(v)))
                 self._add_field(sec_edit.inner, key, sp)
+                self._line_spins[key] = sp
 
             sec_spec = self._section("Detail Saluran", accent=TEXT_3, collapsed=True)
             total_r = data["length_km"] * data["r_ohm_per_km"]
@@ -1092,11 +1246,36 @@ class PropertiesPanel(QWidget):
             self.show_node(tag)
         self.main.set_status("Model diedit.", warn=True)
 
+    def _apply_line_std_type(self, tag, name: str) -> None:
+        """Mengisi parameter saluran dari standard type pandapower terpilih."""
+        if tag not in state.line_data:
+            return
+        params = engine.line_std_types().get(name)
+        if not params:
+            # Pilihan "Manual" hanya melepas penanda preset tanpa mengubah angka.
+            state.line_data[tag].pop("std_type", None)
+            return
+        state.line_data[tag].update(params)
+        state.line_data[tag]["std_type"] = name
+        # Spinbox di panel diisi ulang agar angka preset langsung terlihat.
+        for key, sp in getattr(self, "_line_spins", {}).items():
+            if key in params:
+                sp.blockSignals(True)
+                sp.setValue(params[key])
+                sp.blockSignals(False)
+        state.mark_model_dirty()
+        self.main.clear_results(keep_analysis=False)
+        self.main.canvas_scene.refresh_all()
+        self.main.set_status(f"Preset {name} diterapkan.")
+
     def _set_line(self, tag, key, val):
         if tag not in state.line_data:
             return
         # Perubahan parameter saluran membatalkan hasil lama karena loading/rugi berubah.
         state.line_data[tag][key] = val
+        if key in ("r_ohm_per_km", "x_ohm_per_km", "c_nf_per_km", "max_i_ka"):
+            # Edit manual berarti parameter tidak lagi sesuai preset.
+            state.line_data[tag].pop("std_type", None)
         state.mark_model_dirty()
         self.main.clear_results(keep_analysis=False)
         self.main.canvas_scene.refresh_all()
@@ -1163,8 +1342,6 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("PANDAPOWER VISUALIZATION")
         self.resize(1520, 860)
-        self.left_visible  = True
-        self.right_visible = True
         self.active_toast  = None
         self.status_label  = QLabel("")
         # Reset awal membuat test dan launch manual selalu mulai dari state kosong.
@@ -1189,16 +1366,11 @@ class MainWindow(QMainWindow):
 
         self.analysis_log = QTextEdit()
         self.analysis_log.setReadOnly(True)
-        self.analysis_log.setMinimumHeight(110)
-
-        self.results_text = QTextEdit()
-        self.results_text.setReadOnly(True)
-        self.results_text.setMinimumHeight(72)
-        self.results_text.setPlainText("Jalankan Validasi atau Power Flow.")
+        self.analysis_log.setPlainText("Jalankan Validasi atau Power Flow.")
 
         self.results_table = QTableWidget(0, 6)
+        self.bus_table     = QTableWidget(0, 5)
         self.properties    = PropertiesPanel(self)
-        self.left_dock     = None
         self.right_dock    = None
         self._build_ui()
         self.status_label.setStyleSheet(f"color: {TEXT_1}; padding: 2px 8px;")
@@ -1209,42 +1381,78 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         self._build_toolbar()
-        self._build_left()
         self._build_right()
 
-        self.results_table.setHorizontalHeaderLabels(
-            ["Nama", "Tipe", "Daya aktif", "Daya reaktif", "Rugi-rugi", "Loading"])
-        hdr = self.results_table.horizontalHeader()
-        hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        hdr.setMinimumSectionSize(72)
-        self.results_table.verticalHeader().setVisible(False)
-        self.results_table.setAlternatingRowColors(True)
+        for table, headers in (
+            (self.results_table,
+             ["Nama", "Tipe", "Daya aktif", "Daya reaktif", "Rugi-rugi", "Loading"]),
+            (self.bus_table,
+             ["Bus", "Vn (kV)", "V (pu)", "Sudut (°)", "Status"]),
+        ):
+            table.setHorizontalHeaderLabels(headers)
+            hdr = table.horizontalHeader()
+            hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            hdr.setMinimumSectionSize(72)
+            table.verticalHeader().setVisible(False)
+            table.setAlternatingRowColors(True)
+            table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
-        bottom = QWidget()
-        bottom.setStyleSheet(f"background: {BG_1};")
-        bl = QVBoxLayout(bottom)
-        bl.setContentsMargins(8, 8, 8, 8)
-        bl.setSpacing(6)
-        bl.addWidget(_section_header_lbl("Ringkasan Analisis"))
-        bl.addWidget(self.results_text, 1)
-        bl.addWidget(_section_header_lbl("Hasil Saluran / Trafo"))
-        bl.addWidget(self.results_table, 2)
+        self.bottom_panel = self._build_bottom()
 
         splitter = QSplitter(Qt.Orientation.Vertical)
         # Splitter memberi canvas ruang utama tetapi hasil analisis tetap terlihat.
         splitter.addWidget(self.canvas_view)
-        splitter.addWidget(bottom)
+        splitter.addWidget(self.bottom_panel)
         splitter.setStretchFactor(0, 4)
         splitter.setStretchFactor(1, 2)
-        splitter.setSizes([560, 240])
+        splitter.setSizes([560, 250])
         self.setCentralWidget(splitter)
+
+    # ── bottom result panel ───────────────────────────────────────────
+
+    def _build_bottom(self) -> QWidget:
+        """Panel hasil: baris kartu statistik + tab tabel/log."""
+        bottom = QWidget()
+        bottom.setStyleSheet(f"background: {BG_1};")
+        bl = QVBoxLayout(bottom)
+        bl.setContentsMargins(8, 6, 8, 6)
+        bl.setSpacing(6)
+
+        # Kartu statistik membuat angka kunci terbaca sekilas tanpa membuka tab.
+        chips = QHBoxLayout()
+        chips.setSpacing(6)
+        self.chip_status  = StatChip("Status")
+        self.chip_loss    = StatChip("Total rugi")
+        self.chip_vmin    = StatChip("V minimum")
+        self.chip_loading = StatChip("Loading maks")
+        for chip in (self.chip_status, self.chip_loss,
+                     self.chip_vmin, self.chip_loading):
+            chips.addWidget(chip)
+        chips.addStretch(1)
+        bl.addLayout(chips)
+        self._reset_stat_chips()
+
+        self.result_tabs = QTabWidget()
+        self.result_tabs.addTab(self.results_table, "Saluran / Trafo")
+        self.result_tabs.addTab(self.bus_table, "Tegangan Bus")
+        self.result_tabs.addTab(self.analysis_log, "Log Analisis")
+        bl.addWidget(self.result_tabs, 1)
+        return bottom
+
+    def _reset_stat_chips(self) -> None:
+        for chip in (self.chip_status, self.chip_loss,
+                     self.chip_vmin, self.chip_loading):
+            chip.reset()
+        self.chip_status.set_value("Belum dijalankan", TEXT_2)
 
     # ── ribbon toolbar ────────────────────────────────────────────────
 
     def _build_toolbar(self) -> None:
+        """Ribbon bertab gaya AutoCAD: baris tab di atas, grup tombol di bawah."""
         tb = QToolBar("Ribbon")
         tb.setMovable(False)
-        tb.setFixedHeight(60)
+        tb.setFloatable(False)
+        tb.setFixedHeight(92)
         tb.setIconSize(QSize(16, 16))
         self.addToolBar(tb)
 
@@ -1256,36 +1464,91 @@ class MainWindow(QMainWindow):
                 border-bottom: 2px solid {BORDER_2};
             }}
         """)
-        rl = QHBoxLayout(ribbon)
-        rl.setContentsMargins(8, 0, 8, 0)
-        rl.setSpacing(0)
+        outer = QVBoxLayout(ribbon)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        # ── Tampilan ──────────────────────────────────────────────────
-        g = RibbonGroup("Tampilan")
-        self._btn_tampilan = g.add_btn("MENU TAMPILAN", lambda: None)
-        
-        menu_tampilan = QMenu(self)
-        menu_tampilan.setObjectName("tampilanMenu")
-        
-        self._act_left = QAction("Panel Kiri", self)
-        self._act_left.setCheckable(True)
-        self._act_left.setChecked(True)
-        self._act_left.triggered.connect(self.toggle_left)
-        
-        self._act_right = QAction("Panel Properti", self)
-        self._act_right.setCheckable(True)
-        self._act_right.setChecked(True)
-        self._act_right.triggered.connect(self.toggle_right)
-        
-        menu_tampilan.addAction(self._act_left)
-        menu_tampilan.addAction(self._act_right)
-        
-        self._btn_tampilan.setMenu(menu_tampilan)
+        # ── baris tab ─────────────────────────────────────────────────
+        tab_row = QWidget()
+        tab_row.setStyleSheet(f"background: {BG_0}; border-bottom: 1px solid {BORDER_1};")
+        trl = QHBoxLayout(tab_row)
+        trl.setContentsMargins(8, 0, 8, 0)
+        trl.setSpacing(0)
+
+        self._ribbon_stack = QStackedWidget()
+        self._ribbon_tabs: list[QPushButton] = []
+
+        pages = [
+            ("BERANDA",  self._ribbon_page_home()),
+            ("KOMPONEN", self._ribbon_page_components()),
+            ("ANALISIS", self._ribbon_page_analysis()),
+            ("EKSPOR",   self._ribbon_page_export()),
+            ("TAMPILAN", self._ribbon_page_view()),
+        ]
+        for idx, (title, page) in enumerate(pages):
+            btn = QPushButton(title)
+            btn.setProperty("ribbonTab", True)
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(lambda _=False, i=idx: self._select_ribbon_tab(i))
+            trl.addWidget(btn)
+            self._ribbon_tabs.append(btn)
+            self._ribbon_stack.addWidget(page)
+        trl.addStretch(1)
+
+        outer.addWidget(tab_row)
+        outer.addWidget(self._ribbon_stack, 1)
+        self._select_ribbon_tab(0)
+
+        tb.addWidget(ribbon)
+
+    def _select_ribbon_tab(self, index: int) -> None:
+        self._ribbon_stack.setCurrentIndex(index)
+        for i, btn in enumerate(self._ribbon_tabs):
+            btn.setChecked(i == index)
+
+    @staticmethod
+    def _ribbon_page() -> tuple[QWidget, QHBoxLayout]:
+        page = QWidget()
+        page.setStyleSheet("background: transparent;")
+        lo = QHBoxLayout(page)
+        lo.setContentsMargins(8, 0, 8, 0)
+        lo.setSpacing(0)
+        return page, lo
+
+    def _ribbon_page_home(self) -> QWidget:
+        page, rl = self._ribbon_page()
+        g = RibbonGroup("Project")
+        g.add_btn("BARU",   self.new_project)
+        g.add_btn("BUKA",   self.load_project)
+        g.add_btn("SIMPAN", self.save_project)
         rl.addWidget(g)
         rl.addWidget(_v_sep_ribbon())
 
-        # ── Komponen ──────────────────────────────────────────────────
-        g = RibbonGroup("Komponen")
+        g = RibbonGroup("Edit")
+        g.add_btn("UNDO", self.undo)
+        g.add_btn("REDO", self.redo)
+        rl.addWidget(g)
+        rl.addWidget(_v_sep_ribbon())
+
+        g = RibbonGroup("Analisis")
+        g.add_btn("RUN POWER FLOW", self.run_power_flow, color=GREEN, bold=True)
+        g.add_btn("VALIDASI", self.validate_network, color=BLUE)
+        rl.addWidget(g)
+        rl.addWidget(_v_sep_ribbon())
+
+        g = RibbonGroup("Zoom")
+        g.add_btn("OUT", lambda: self.canvas_view.set_zoom(self.canvas_view.zoom / 1.2))
+        g.add_widget(self.zoom_label)
+        g.add_btn("IN", lambda: self.canvas_view.set_zoom(self.canvas_view.zoom * 1.2))
+        g.add_btn("FIT", self.canvas_view.fit_all)
+        rl.addWidget(g)
+        rl.addStretch(1)
+        return page
+
+    def _ribbon_page_components(self) -> QWidget:
+        page, rl = self._ribbon_page()
+        g = RibbonGroup("Tambah Komponen")
         for label, kind in [("BUS", "bus"), ("GEN", "gen"), ("TRAFO", "trafo"),
                             ("SHUNT", "shunt"), ("BEBAN", "load")]:
             # Tombol komponen memanggil add_component agar spawn selalu memakai area terlihat.
@@ -1294,85 +1557,60 @@ class MainWindow(QMainWindow):
         rl.addWidget(g)
         rl.addWidget(_v_sep_ribbon())
 
-        # ── Edit ──────────────────────────────────────────────────────
-        g = RibbonGroup("Edit")
-        g.add_btn("UNDO", self.undo)
+        g = RibbonGroup("Canvas")
+        g.add_btn("MUAT TEMPLATE", self.load_template)
+        g.add_btn("KOSONGKAN", self.request_clear_canvas, color=RED)
         rl.addWidget(g)
-        rl.addWidget(_v_sep_ribbon())
-
-        # ── Zoom ──────────────────────────────────────────────────────
-        g = RibbonGroup("Zoom")
-        g.add_btn("OUT", lambda: self.canvas_view.set_zoom(self.canvas_view.zoom / 1.2))
-        g.add_widget(self.zoom_label)
-        g.add_btn("IN", lambda: self.canvas_view.set_zoom(self.canvas_view.zoom * 1.2))
-        g.add_btn("RESET", self.canvas_view.reset_view)
-        g.add_btn("FIT",   self.canvas_view.fit_all)
-        rl.addWidget(g)
-        rl.addWidget(_v_sep_ribbon())
-
-        # ── Analisis ──────────────────────────────────────────────────
-        g = RibbonGroup("Analisis")
-        g.add_btn("RUN POWER FLOW", self.run_power_flow, color=GREEN, bold=True)
-        g.add_btn("VALIDASI",   self.validate_network, color=BLUE)
-        g.add_btn("EXPORT PNG",  self.export_canvas_image, color=PURPLE)
-        g.add_btn("EXPORT REPORT", self.export_report, color=ACCENT)
-        rl.addWidget(g)
-
         rl.addStretch(1)
+        return page
 
-        tb.addWidget(ribbon)
-        tb.setFloatable(False)
+    def _ribbon_page_analysis(self) -> QWidget:
+        page, rl = self._ribbon_page()
+        g = RibbonGroup("Simulasi")
+        g.add_btn("RUN POWER FLOW", self.run_power_flow, color=GREEN, bold=True)
+        g.add_btn("VALIDASI JARINGAN", self.validate_network, color=BLUE)
+        rl.addWidget(g)
+        rl.addWidget(_v_sep_ribbon())
 
-    # ── left panel ────────────────────────────────────────────────────
+        g = RibbonGroup("Seleksi")
+        g.add_btn("EDIT SALURAN", self.edit_selected_line)
+        rl.addWidget(g)
+        rl.addStretch(1)
+        return page
 
-    def _build_left(self) -> None:
-        panel = QWidget()
-        panel.setMinimumWidth(270)
-        panel.setStyleSheet(f"background: {BG_1};")
-        lo = QVBoxLayout(panel)
-        lo.setContentsMargins(8, 10, 8, 10)
-        lo.setSpacing(4)
+    def _ribbon_page_export(self) -> QWidget:
+        page, rl = self._ribbon_page()
+        g = RibbonGroup("Gambar & Laporan")
+        g.add_btn("EXPORT PNG", self.export_canvas_image, color=PURPLE)
+        g.add_btn("EXPORT LAPORAN HTML", self.export_report, color=ACCENT)
+        rl.addWidget(g)
+        rl.addWidget(_v_sep_ribbon())
 
-        lo.addWidget(_section_header_lbl("Analisis"))
-        # Validasi dan power flow sengaja dekat log supaya pesan error langsung terbaca.
-        self._side_btn(lo, "VALIDASI JARINGAN",    self.validate_network)
-        self._side_btn(lo, "JALANKAN POWER FLOW",  self.run_power_flow)
-        self._side_btn(lo, "EDIT SALURAN",         self.edit_selected_line)
-        lo.addSpacing(4)
-        lo.addWidget(_muted("Log validasi / ringkasan:"))
-        lo.addWidget(self.analysis_log, 1)
+        g = RibbonGroup("Data")
+        g.add_btn("HASIL CSV", self.export_results)
+        g.add_btn("PANDAPOWER JSON", self.export_pandapower_json)
+        rl.addWidget(g)
+        rl.addStretch(1)
+        return page
 
-        lo.addSpacing(4)
-        lo.addWidget(_h_sep())
-        lo.addSpacing(4)
-        lo.addWidget(_section_header_lbl("Project"))
-        # Panel kiri menaruh action project utama agar alur laporan tidak bergantung toolbar.
-        self._side_btn(lo, "PROJECT BARU",         self.new_project)
-        self._side_btn(lo, "MUAT TEMPLATE",        self.load_template)
-        self._side_btn(lo, "KOSONGKAN CANVAS",     self.request_clear_canvas)
-        self._side_btn(lo, "SIMPAN PROJECT",       self.save_project)
-        self._side_btn(lo, "BUKA PROJECT",         self.load_project)
-        self._side_btn(lo, "EKSPOR HASIL",         self.export_results)
-        self._side_btn(lo, "EKSPOR LAPORAN",       self.export_report)
-        lo.addSpacing(4)
-        self._side_btn(lo, "UNDO (Ctrl+Z)",        self.undo)
+    def _ribbon_page_view(self) -> QWidget:
+        page, rl = self._ribbon_page()
+        g = RibbonGroup("Panel")
+        self._btn_toggle_right = g.add_btn("PANEL PROPERTI", self.toggle_right)
+        self._btn_toggle_right.setCheckable(True)
+        self._btn_toggle_right.setChecked(True)
+        self._btn_toggle_bottom = g.add_btn("PANEL HASIL", self.toggle_bottom)
+        self._btn_toggle_bottom.setCheckable(True)
+        self._btn_toggle_bottom.setChecked(True)
+        rl.addWidget(g)
+        rl.addWidget(_v_sep_ribbon())
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setWidget(panel)
-
-        self.left_dock = QDockWidget("Panel Kiri", self)
-        self.left_dock.setObjectName("leftDock")
-        self.left_dock.setWidget(scroll)
-        self.left_dock.setFeatures(
-            QDockWidget.DockWidgetFeature.DockWidgetMovable
-            | QDockWidget.DockWidgetFeature.DockWidgetFloatable)
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.left_dock)
-        self.left_dock.setMinimumWidth(LEFT_WIDTH)
-        self.resizeDocks([self.left_dock], [LEFT_WIDTH], Qt.Orientation.Horizontal)
-        self.left_dock.visibilityChanged.connect(self._act_left.setChecked)
+        g = RibbonGroup("Kamera")
+        g.add_btn("RESET VIEW", self.canvas_view.reset_view)
+        g.add_btn("FIT SEMUA", self.canvas_view.fit_all)
+        rl.addWidget(g)
+        rl.addStretch(1)
+        return page
 
     # ── right panel ───────────────────────────────────────────────────
 
@@ -1389,29 +1627,20 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.right_dock)
         self.right_dock.setMinimumWidth(RIGHT_WIDTH)
         self.resizeDocks([self.right_dock], [RIGHT_WIDTH], Qt.Orientation.Horizontal)
-        self.right_dock.visibilityChanged.connect(self._act_right.setChecked)
-
-    def _side_btn(self, layout, text, cb):
-        b = QPushButton(f"  {text.strip()}  ")
-        b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        b.clicked.connect(cb)
-        layout.addWidget(b)
+        self.right_dock.visibilityChanged.connect(self._btn_toggle_right.setChecked)
 
     # ── toggles ───────────────────────────────────────────────────────
 
-    def toggle_left(self) -> None:
-        self.left_visible = self._act_left.isChecked()
-        self.left_dock.setVisible(self.left_visible)
-
     def toggle_right(self) -> None:
-        self.right_visible = self._act_right.isChecked()
-        self.right_dock.setVisible(self.right_visible)
+        self.right_dock.setVisible(self._btn_toggle_right.isChecked())
+
+    def toggle_bottom(self) -> None:
+        self.bottom_panel.setVisible(self._btn_toggle_bottom.isChecked())
 
     # ── canvas actions ────────────────────────────────────────────────
 
     def set_analysis_text(self, text: str) -> None:
-        self.analysis_log.setPlainText(text)
-        self.results_text.setPlainText(text or "Jalankan Validasi atau Power Flow.")
+        self.analysis_log.setPlainText(text or "Jalankan Validasi atau Power Flow.")
 
     def edit_selected_line(self) -> None:
         lt = self.canvas_scene.selected_link_tag()
@@ -1432,6 +1661,8 @@ class MainWindow(QMainWindow):
         snap = state.pop_undo()
         if snap is None:
             self.set_status("Tidak ada undo.", error=True); return
+        # Kondisi sekarang disimpan dulu ke redo stack agar undo bisa dibatalkan.
+        state.push_redo_snapshot()
         # qt_model memulihkan state, lalu scene Qt dibangun ulang dari state tersebut.
         qt_model.restore_undo_snapshot(snap)
         # Item Qt lama dibuang dan dibuat ulang dari state hasil undo.
@@ -1441,6 +1672,21 @@ class MainWindow(QMainWindow):
         # Panel dikosongkan karena selection lama mungkin sudah hilang.
         self.properties.show_empty()
         self.set_status("Undo.")
+
+    def redo(self) -> None:
+        """Menerapkan kembali snapshot yang dibatalkan oleh undo terakhir."""
+        if self.properties.editing_field:
+            return
+        snap = state.pop_redo()
+        if snap is None:
+            self.set_status("Tidak ada redo.", error=True); return
+        # Kondisi sekarang masuk undo stack tanpa menghapus sisa redo.
+        state.push_undo_for_redo()
+        qt_model.restore_undo_snapshot(snap)
+        self.canvas_scene.rebuild_from_state()
+        self.clear_results()
+        self.properties.show_empty()
+        self.set_status("Redo.")
 
     def add_component(self, kind: str) -> None:
         """Menambahkan komponen baru ke model dan menampilkannya di canvas."""
@@ -1488,7 +1734,18 @@ class MainWindow(QMainWindow):
             self.delete_selection(); return
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             if event.key() == Qt.Key.Key_Z:
+                # Ctrl+Shift+Z adalah alias redo yang umum di editor lain.
+                if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                    self.redo(); return
                 self.undo(); return
+            if event.key() == Qt.Key.Key_Y:
+                self.redo(); return
+            if event.key() == Qt.Key.Key_S:
+                self.save_project(); return
+            if event.key() == Qt.Key.Key_O:
+                self.load_project(); return
+            if event.key() == Qt.Key.Key_N:
+                self.new_project(); return
             if event.key() in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
                 self.canvas_view.set_zoom(self.canvas_view.zoom * 1.2); return
             if event.key() == Qt.Key.Key_Minus:
@@ -1516,11 +1773,11 @@ class MainWindow(QMainWindow):
         state.clear_results()
         # keep_analysis False dipakai ketika edit parameter, supaya log lama ikut hilang.
         if not keep_analysis:
-            self.analysis_log.clear()
-        # Text default mengingatkan user harus validasi/run ulang.
-        self.results_text.setPlainText("Jalankan Validasi atau Power Flow.")
+            self.analysis_log.setPlainText("Jalankan Validasi atau Power Flow.")
         # Tabel bawah dikosongkan karena row lama sudah tidak sesuai model.
         self.results_table.setRowCount(0)
+        self.bus_table.setRowCount(0)
+        self._reset_stat_chips()
         # Repaint canvas agar warna hasil/loading ikut hilang.
         self.canvas_scene.refresh_all()
 
@@ -1547,8 +1804,9 @@ class MainWindow(QMainWindow):
         if not lines:
             # Tidak ada error/warning berarti model siap untuk run power flow.
             lines.append("✓  Jaringan valid.  Siap Power Flow.")
-        # Teks log kiri dan ringkasan bawah disamakan.
         self.set_analysis_text("\n".join(lines))
+        # Tab log dibuka langsung supaya hasil validasi tidak terlewat.
+        self.result_tabs.setCurrentWidget(self.analysis_log)
         # Status bar/toast membedakan error dengan warna.
         self.set_status("Jaringan belum valid." if errors else "Jaringan valid.",
                         error=bool(errors))
@@ -1566,6 +1824,9 @@ class MainWindow(QMainWindow):
             self.clear_results()
             # Ubah separator " | " menjadi bullet baris baru supaya error mudah dibaca.
             self.set_analysis_text("KESALAHAN\n  • " + msg.replace(" | ", "\n  • "))
+            self.chip_status.set_value("Gagal", RED)
+            # Log error langsung ditampilkan agar user tidak mencari tab.
+            self.result_tabs.setCurrentWidget(self.analysis_log)
             # Tampilkan pesan gagal di status bar dan toast merah.
             self.set_status(msg, error=True)
             # Stop di sini karena tidak ada hasil yang bisa dirender.
@@ -1574,8 +1835,10 @@ class MainWindow(QMainWindow):
         rows = self._line_result_rows()
         # Tabel bawah diisi dari rows hasil ringkasan.
         self._render_rows(rows)
+        self._render_bus_rows()
         # Summary mengambil angka total dari object net pandapower.
         self.set_analysis_text(self._summary(net, rows))
+        self._update_stat_chips(net, rows)
         # Jika user sedang memilih node, panel kanan ikut refresh menampilkan hasil terbaru.
         if state.selected_node[0]:
             # show_node membaca state.last_results untuk komponen terpilih.
@@ -1633,9 +1896,55 @@ class MainWindow(QMainWindow):
             for ci, v in enumerate(vals):
                 item = QTableWidgetItem(str(v))
                 if ci == 5:
-                    c = QColor(80, 220, 100) if row["loading"] < 50 else QColor(240, 200, 60)
+                    # Tingkatan warna sama dengan warna kabel di canvas.
+                    loading = row["loading"]
+                    if loading < 50:
+                        c = QColor(80, 220, 100)
+                    elif loading < 80:
+                        c = QColor(240, 220, 60)
+                    elif loading < 100:
+                        c = QColor(240, 150, 60)
+                    else:
+                        c = QColor(230, 80, 80)
                     item.setForeground(c)
                 self.results_table.setItem(ri, ci, item)
+
+    def _render_bus_rows(self) -> None:
+        """Mengisi tab Tegangan Bus dari hasil power flow terakhir."""
+        rows = []
+        for nt, res in state.last_results.get("nodes", {}).items():
+            nd = state.nodes.get(nt, {})
+            if nd.get("kind") != "bus" or "vm_pu" not in res:
+                continue
+            rows.append((nd.get("label", "?"), float(nd.get("vn_kv", 0.0)),
+                         res["vm_pu"], res.get("va_degree", 0.0)))
+        self.bus_table.setRowCount(len(rows))
+        for ri, (label, vn, vm, va) in enumerate(rows):
+            if 0.95 <= vm <= 1.05:
+                status, col = "Normal", QColor(80, 220, 100)
+            elif 0.90 <= vm <= 1.10:
+                status, col = "Waspada", QColor(240, 200, 60)
+            else:
+                status, col = "Kritis", QColor(230, 80, 80)
+            vals = [label, f"{vn:.2f}", f"{vm:.4f}", f"{va:+.2f}", status]
+            for ci, v in enumerate(vals):
+                item = QTableWidgetItem(str(v))
+                if ci >= 2:
+                    item.setForeground(col)
+                self.bus_table.setItem(ri, ci, item)
+
+    def _update_stat_chips(self, net, rows) -> None:
+        """Memperbarui kartu statistik dari hasil run terakhir."""
+        ll = net.res_line["pl_mw"].sum() * 1000 if len(net.line) else 0
+        tl = net.res_trafo["pl_mw"].sum() * 1000 if len(net.trafo) else 0
+        mv = net.res_bus["vm_pu"].min() if len(net.res_bus) else 0
+        ml = max((r["loading"] for r in rows), default=0)
+        self.chip_status.set_value("Konvergen", GREEN)
+        self.chip_loss.set_value(f"{ll + tl:.3f} kW")
+        v_col = GREEN if 0.95 <= mv <= 1.05 else (WARN if 0.90 <= mv else RED)
+        self.chip_vmin.set_value(f"{mv:.4f} pu", v_col)
+        l_col = GREEN if ml < 50 else (WARN if ml < 80 else RED)
+        self.chip_loading.set_value(f"{ml:.1f} %", l_col)
 
     def _summary(self, net, rows) -> str:
         """Membuat ringkasan total jaringan dari hasil pandapower."""
@@ -1643,7 +1952,9 @@ class MainWindow(QMainWindow):
         ll = net.res_line["pl_mw"].sum() * 1000 if len(net.line) else 0
         tl = net.res_trafo["pl_mw"].sum() * 1000 if len(net.trafo) else 0
         lp = net.load["p_mw"].sum() if len(net.load) else 0
+        # Generator PQ ada di tabel sgen, generator PV ada di tabel gen.
         gp = net.sgen["p_mw"].sum() if len(net.sgen) else 0
+        gp += net.res_gen["p_mw"].sum() if len(net.gen) else 0
         ep = net.res_ext_grid["p_mw"].sum() if len(net.res_ext_grid) else 0
         mv = net.res_bus["vm_pu"].min() if len(net.res_bus) else 0
         ml = max((r["loading"] for r in rows), default=0)
@@ -1791,6 +2102,21 @@ class MainWindow(QMainWindow):
         if not qt_model.export_results():
             self.set_status("Belum ada hasil.", error=True); return
         self.set_status("Diekspor ke exports/")
+
+    def export_pandapower_json(self) -> None:
+        """Mengekspor model aktif sebagai file JSON pandapower (pp.to_json)."""
+        default_path = qt_model.EXPORT_DIR / "pandapower_net.json"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Ekspor Network Pandapower", str(default_path),
+            "Pandapower JSON (*.json);;All Files (*)")
+        if not path:
+            return
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        problem = engine.export_pandapower_json(Path(path))
+        if problem:
+            self.set_status(problem, error=True)
+            return
+        self.set_status(f"Network pandapower disimpan: {Path(path).name}")
 
     def export_report(self) -> None:
         """Mengekspor laporan HTML lengkap dari hasil power flow terakhir."""

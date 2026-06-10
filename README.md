@@ -70,6 +70,40 @@ toolbar to generate a standalone HTML report. The exported report combines the
 current diagram snapshot, network summary, result charts, and bus/branch tables
 using the template in `docs/report-template.html`.
 
+## Analysis Features
+
+* **Power flow** (`pp.runpp`) with per-component results, loading colours on
+  the canvas, and voltage-band colouring on every bus card
+  (green 0.95-1.05 pu, yellow 0.90-1.10 pu, red outside).
+* **Generator control modes** — each generator can run as a static PQ source
+  (`pp.create_sgen`) or as a voltage-controlled PV machine (`pp.create_gen`)
+  with an adjustable voltage setpoint.
+* **Line standard types** — bus-to-bus lines can load R/X/C/Imax presets from
+  the pandapower standard-type library (NAYY, NA2XS2Y, overhead lines, ...).
+* **Pandapower JSON export** — `EKSPOR PANDAPOWER` writes the network with
+  `pp.to_json` so it can be re-opened in plain pandapower scripts.
+
+## User Interface
+
+* **Tabbed ribbon** (AutoCAD style) — BERANDA, KOMPONEN, ANALISIS, EKSPOR,
+  and TAMPILAN tabs group every action into labelled button clusters.
+* **Flexible wires** (draw.io style) — wires have a wide hit area, highlight
+  on hover, and any segment can be dragged directly. Dragging a segment next
+  to a port automatically inserts a bend so the connection stays attached.
+  Wires follow their components when nodes are moved.
+* **Result panel** — stat cards (status, total loss, minimum voltage, maximum
+  loading) above tabbed tables for branch results, bus voltages, and the
+  validation log. Validation and errors switch to the log tab automatically.
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
+| `Ctrl+S` / `Ctrl+O` / `Ctrl+N` | Save / Open / New project |
+| `Ctrl++` / `Ctrl+-` / `Ctrl+0` | Zoom in / out / reset |
+| `Del` / `Backspace` | Delete selection |
+
 ## Notes
 
 The project name is written as **PANDAPOWER VISUALIZATION**. The application

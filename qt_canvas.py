@@ -32,6 +32,8 @@ from PySide6.QtWidgets import (
     QGraphicsPathItem,
     QGraphicsScene,
     QGraphicsView,
+    QStyle,
+    QStyleOptionGraphicsItem,
 )
 
 import canvas_logic
@@ -46,12 +48,17 @@ import state
 #  Visual constants
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Ukuran grid snap: posisi node, titik belok kabel, dan ukuran kartu
+# semuanya kelipatan nilai ini agar diagram selalu rapi.
+GRID_SNAP = 12.0
+
+# Ukuran kartu dibuat kelipatan GRID_SNAP supaya port jatuh tepat di grid.
 NODE_SIZES = {
-    "bus":   (170.0, 118.0),
-    "gen":   (160.0,  98.0),
-    "trafo": (200.0, 116.0),
-    "shunt": (170.0,  98.0),
-    "load":  (170.0,  98.0),
+    "bus":   (168.0, 120.0),
+    "gen":   (156.0,  96.0),
+    "trafo": (204.0, 120.0),
+    "shunt": (168.0,  96.0),
+    "load":  (168.0,  96.0),
 }
 
 NODE_COLORS = {
@@ -138,26 +145,44 @@ def node_title(node_tag) -> str:
     return label
 
 
-def node_lines(node_tag) -> list[str]:
+def voltage_band_color(vm_pu: float) -> QColor:
+    """Warna indikator tegangan bus: hijau normal, kuning waspada, merah bahaya."""
+    if 0.95 <= vm_pu <= 1.05:
+        return QColor(80, 220, 100)
+    if 0.90 <= vm_pu <= 1.10:
+        return QColor(240, 200, 60)
+    return QColor(230, 80, 80)
+
+
+def node_lines(node_tag) -> list[tuple[str, QColor | None]]:
+    """Baris teks isi kartu node sebagai (teks, warna_opsional)."""
     nd = state.nodes.get(node_tag, {})
     kind = nd.get("kind")
     result = state.last_results.get("nodes", {}).get(node_tag, {})
     if kind == "bus":
-        out = [f"Slack {nd['vn_kv']} kV" if nd.get("is_slack") else f"Vn {nd['vn_kv']} kV"]
+        out = [(f"Slack {nd['vn_kv']} kV" if nd.get("is_slack") else f"Vn {nd['vn_kv']} kV", None)]
         if "vm_pu" in result:
-            out.append(f"V {result['vm_pu']:.4f} pu")
-            out.append(f"∠ {result.get('va_degree', 0.0):.1f}°")
+            # Tegangan hasil power flow diberi warna band agar pelanggaran langsung terlihat.
+            vcol = voltage_band_color(result["vm_pu"])
+            out.append((f"V {result['vm_pu']:.4f} pu", vcol))
+            out.append((f"∠ {result.get('va_degree', 0.0):.1f}°", None))
         else:
-            out += ["V  —", "∠  —"]
+            out += [("V  —", None), ("∠  —", None)]
         return out
     if kind == "gen":
-        return ["GEN", f"P {nd['p_mw']} MW", f"Q {nd['q_mvar']} MVAr"]
+        mode = "PV" if nd.get("ctrl_mode") == "pv" else "PQ"
+        rows = [(f"GEN {mode}", None), (f"P {nd['p_mw']} MW", None)]
+        if mode == "PV":
+            rows.append((f"Vset {nd.get('vm_pu', 1.0)} pu", None))
+        else:
+            rows.append((f"Q {nd['q_mvar']} MVAr", None))
+        return rows
     if kind == "load":
-        return ["LOAD", f"P {nd['p_mw']} MW", f"Q {nd['q_mvar']} MVAr"]
+        return [("LOAD", None), (f"P {nd['p_mw']} MW", None), (f"Q {nd['q_mvar']} MVAr", None)]
     if kind == "shunt":
-        return ["SHUNT", f"P {nd.get('p_mw', 0.0)} MW", f"Q {nd['q_mvar']} MVAr"]
+        return [("SHUNT", None), (f"P {nd.get('p_mw', 0.0)} MW", None), (f"Q {nd['q_mvar']} MVAr", None)]
     if kind == "trafo":
-        return [f"HV {nd['vn_hv_kv']} kV", f"S {nd['sn_mva']} MVA", f"LV {nd['vn_lv_kv']} kV"]
+        return [(f"HV {nd['vn_hv_kv']} kV", None), (f"S {nd['sn_mva']} MVA", None), (f"LV {nd['vn_lv_kv']} kV", None)]
     return []
 
 
@@ -165,8 +190,8 @@ def port_layout(node_tag) -> list[tuple[str, str, QPointF]]:
     """Return [(attr_key, label, local_pos), ...]"""
     nd = state.nodes.get(node_tag, {})
     kind = nd.get("kind")
-    w, h = NODE_SIZES.get(kind, (170.0, 100.0))
-    my = 65.0
+    w, h = NODE_SIZES.get(kind, (168.0, 96.0))
+    my = 60.0
     # Posisi port harus sejalan dengan role koneksi di qt_model.validate_link().
     if kind == "bus":
         return [
@@ -183,6 +208,34 @@ def port_layout(node_tag) -> list[tuple[str, str, QPointF]]:
             ("lv_pin", "LV", QPointF(w, my)),
         ]
     return []
+
+
+def attachment_offsets(node_tag, attr_tag) -> dict:
+    """{link_tag: offset_y} slot titik sambung fan-out untuk satu port.
+
+    Kabel diurutkan menurut posisi Y ujung lain agar tidak saling silang;
+    jarak antar slot mengikuti grid dan dirapatkan kalau kabel banyak.
+    """
+    siblings = [lt for lt, (fa, ta) in state.links.items()
+                if fa == attr_tag or ta == attr_tag]
+    if len(siblings) <= 1:
+        return {lt: 0.0 for lt in siblings}
+
+    def other_end_y(lt):
+        fa, ta = state.links[lt]
+        other = ta if fa == attr_tag else fa
+        on = state.attr_to_node.get(other)
+        return state.nodes.get(on, {}).get("world_pos", (0.0, 0.0))[1]
+
+    siblings.sort(key=other_end_y)
+    kind = state.nodes.get(node_tag, {}).get("kind")
+    height = NODE_SIZES.get(kind, (168.0, 96.0))[1]
+    n = len(siblings)
+    spacing = min(GRID_SNAP * 2, (height - 36.0) / max(1, n - 1))
+    return {
+        lt: (idx - (n - 1) / 2.0) * spacing
+        for idx, lt in enumerate(siblings)
+    }
 
 
 def _port_is_connected(node_tag, attr_key) -> bool:
@@ -251,7 +304,7 @@ class RubberBandItem(QGraphicsPathItem):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Orthogonal auto-routing helpers
+#  Orthogonal routing helpers (pure functions, mudah dites)
 # ═══════════════════════════════════════════════════════════════════════════
 
 def auto_ortho_waypoints(sx: float, sy: float, ex: float, ey: float):
@@ -273,125 +326,92 @@ def _seg_dist(p: QPointF, a: QPointF, b: QPointF) -> float:
     return hypot(dx, dy)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-#  SegmentHandleItem – drag handle at midpoint of an orthogonal segment
-# ═══════════════════════════════════════════════════════════════════════════
+def orthogonalize(pts: list) -> list:
+    """Sisipkan titik belok L agar polyline 100% orthogonal (tanpa diagonal).
 
-class SegmentHandleItem(QGraphicsItem):
-    """Handle at the midpoint of an internal edge segment.
-
-    • Horizontal segment → drag **up / down** (changes Y of both endpoints).
-    • Vertical   segment → drag **left / right** (changes X of both endpoints).
+    Inilah jaminan utama ala draw.io: apapun isi waypoint (termasuk sisa
+    posisi lama setelah node digeser), hasil render selalu siku-siku.
     """
-
-    SIZE = 5.0
-
-    def __init__(self, edge_item, wp_left: int, wp_right: int):
-        super().__init__()
-        self.edge = edge_item
-        self.wp_left = wp_left        # index in link_waypoints list
-        self.wp_right = wp_right
-        self.setZValue(100)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
-        self.setAcceptHoverEvents(True)
-        self._hovered = False
-        self._is_horizontal = True
-        self.reposition()
-
-    # ── helpers ────────────────────────────────────────────────────────
-
-    def _wp_pair(self):
-        wps = state.link_waypoints.get(self.edge.link_tag, [])
-        if self.wp_left < len(wps) and self.wp_right < len(wps):
-            return wps[self.wp_left], wps[self.wp_right]
-        return None, None
-
-    def reposition(self):
-        p1, p2 = self._wp_pair()
-        if p1 is None:
-            return
-        self.setPos((p1[0] + p2[0]) / 2.0, (p1[1] + p2[1]) / 2.0)
-        dx, dy = abs(p1[0] - p2[0]), abs(p1[1] - p2[1])
-        self._is_horizontal = (dy < dx) if max(dx, dy) > 1.0 else True
-
-    # ── QGraphicsItem overrides ───────────────────────────────────────
-
-    def boundingRect(self) -> QRectF:
-        s = self.SIZE + 1
-        return QRectF(-s, -s, 2 * s, 2 * s)
-
-    def paint(self, painter: QPainter, option, widget=None) -> None:
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        c = QColor(100, 210, 255) if self._hovered else QColor(70, 160, 220)
-        painter.setBrush(QBrush(c))
-        painter.setPen(QPen(QColor(20, 24, 28), 1.0))
-        s = self.SIZE
-        if self._is_horizontal:
-            painter.drawRect(QRectF(-s, -s * 0.55, 2 * s, 2 * s * 0.55))
-        else:
-            painter.drawRect(QRectF(-s * 0.55, -s, 2 * s * 0.55, 2 * s))
-
-    def hoverEnterEvent(self, event):
-        self._hovered = True
-        self.update()
-        super().hoverEnterEvent(event)
-
-    def hoverLeaveEvent(self, event):
-        self._hovered = False
-        self.update()
-        super().hoverLeaveEvent(event)
-
-    def itemChange(self, change, value):
-        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.scene():
-            wps = state.link_waypoints.get(self.edge.link_tag, [])
-            if self.wp_left >= len(wps) or self.wp_right >= len(wps):
-                return value
-            p1, p2 = wps[self.wp_left], wps[self.wp_right]
-            # Handle mengubah waypoint langsung di state agar jalur kabel tersimpan di project.
-            if self._is_horizontal:
-                new_y = round(value.y() / 12.0) * 12.0
-                mx = (p1[0] + p2[0]) / 2.0
-                wps[self.wp_left]  = (p1[0], new_y)
-                wps[self.wp_right] = (p2[0], new_y)
-                state.mark_model_dirty()
-                self.edge.update_path_only()
-                return QPointF(mx, new_y)
+    if len(pts) < 2:
+        return list(pts)
+    out = [tuple(pts[0])]
+    prev_dir = None
+    for target in pts[1:]:
+        cur = out[-1]
+        dx, dy = target[0] - cur[0], target[1] - cur[1]
+        if abs(dx) > 0.5 and abs(dy) > 0.5:
+            # Belokan meneruskan arah segmen sebelumnya supaya tidak zigzag.
+            if prev_dir == "v":
+                corner = (cur[0], target[1])
             else:
-                new_x = round(value.x() / 12.0) * 12.0
-                my = (p1[1] + p2[1]) / 2.0
-                wps[self.wp_left]  = (new_x, p1[1])
-                wps[self.wp_right] = (new_x, p2[1])
-                state.mark_model_dirty()
-                self.edge.update_path_only()
-                return QPointF(new_x, my)
-        return super().itemChange(change, value)
+                corner = (target[0], cur[1])
+            out.append(corner)
+            cur = corner
+            dx, dy = target[0] - cur[0], target[1] - cur[1]
+        if abs(dx) > 0.5 or abs(dy) > 0.5:
+            out.append(tuple(target))
+            prev_dir = "h" if abs(dx) > abs(dy) else "v"
+    return out
+
+
+def simplify_route(pts: list) -> list:
+    """Buang titik duplikat dan titik kolinear agar rute tetap bersih."""
+    if len(pts) < 2:
+        return list(pts)
+    out = [tuple(pts[0])]
+    for p in pts[1:]:
+        if abs(p[0] - out[-1][0]) < 0.5 and abs(p[1] - out[-1][1]) < 0.5:
+            continue
+        out.append(tuple(p))
+    i = 1
+    while i < len(out) - 1:
+        a, b, c = out[i - 1], out[i], out[i + 1]
+        collinear_v = abs(a[0] - b[0]) < 0.5 and abs(b[0] - c[0]) < 0.5
+        collinear_h = abs(a[1] - b[1]) < 0.5 and abs(b[1] - c[1]) < 0.5
+        if collinear_v or collinear_h:
+            out.pop(i)
+        else:
+            i += 1
+    return out
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  EdgeItem – orthogonal wire with segment handles
+#  EdgeItem – orthogonal wire, draw.io-style editing
 # ═══════════════════════════════════════════════════════════════════════════
 
 class EdgeItem(QGraphicsPathItem):
-    """Orthogonal wire connecting two ports via waypoints."""
+    """Kabel orthogonal yang bisa diedit langsung seperti draw.io.
+
+    Prinsip desain:
+    * Waypoint di state boleh "kotor" (sisa posisi lama setelah node digeser);
+      route_points() selalu meng-orthogonalisasi ulang saat render sehingga
+      segmen diagonal mustahil muncul.
+    * Tidak ada item handle terpisah: segmen kabel digeser dengan klik-drag
+      langsung. Titik belok dan marker segmen digambar oleh paint().
+    * Double-click merapikan rute kembali ke bentuk otomatis.
+    """
 
     def __init__(self, link_tag, scene_ref: "GridScene"):
         super().__init__()
         self.link_tag = link_tag
         self.scene_ref = scene_ref
-        self.handles: list[SegmentHandleItem] = []
         self.setZValue(-10)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setAcceptHoverEvents(True)
+        self._hovered = False
+        self._drag_seg: int | None = None
+        self._drag_started = False
+        self._route_cache: list = []
         self._ensure_waypoints()
         self.update_path()
 
-    # ── waypoint helpers ──────────────────────────────────────────────
+    # ── route geometry ────────────────────────────────────────────────
 
     def _port_positions(self):
         fa, ta = state.links.get(self.link_tag, (None, None))
-        s = self.scene_ref.port_scene_pos(fa)
-        e = self.scene_ref.port_scene_pos(ta)
+        # Tiap kabel memakai slot titik sambungnya sendiri (fan-out).
+        s = self.scene_ref.port_scene_pos(fa, self.link_tag)
+        e = self.scene_ref.port_scene_pos(ta, self.link_tag)
         return s, e
 
     def _ensure_waypoints(self):
@@ -401,58 +421,45 @@ class EdgeItem(QGraphicsPathItem):
         s, e = self._port_positions()
         if s is None or e is None:
             return
-        # Waypoint default dibuat sekali supaya user bisa mengedit jalur tanpa di-reset.
+        # Rute default H-V-H dengan satu belokan tengah yang bisa digeser.
         state.link_waypoints[lt] = auto_ortho_waypoints(
             s.x(), s.y(), e.x(), e.y()
         )
 
-    def maintain_port_alignment(self):
-        """Keep wp[0].y == start.y and wp[-1].y == end.y so that the first
-        and last segments stay perfectly horizontal."""
-        lt = self.link_tag
-        wps = state.link_waypoints.get(lt)
-        if not wps or len(wps) < 2:
-            return
-        s, e = self._port_positions()
-        if s is None or e is None:
-            return
-        # Saat node digeser, ujung kabel ikut port tetapi lekukan tengah tetap dipertahankan.
-        wps[0]  = (wps[0][0],  s.y())
-        wps[-1] = (wps[-1][0], e.y())
-
-    def full_points(self):
-        """Return [start, *waypoints, end] as list of (x, y) tuples."""
+    def route_points(self) -> list:
+        """Polyline final [start, ..., end] yang dijamin orthogonal & bersih."""
         s, e = self._port_positions()
         if s is None or e is None:
             return []
         pts = [(s.x(), s.y())]
-        pts.extend(state.link_waypoints.get(self.link_tag, []))
+        pts.extend(tuple(p) for p in state.link_waypoints.get(self.link_tag, []))
         pts.append((e.x(), e.y()))
-        return pts
+        return simplify_route(orthogonalize(pts))
+
+    # Alias lama; beberapa alat diagnostik memakai nama ini.
+    def full_points(self) -> list:
+        return self.route_points()
 
     # ── path rendering ────────────────────────────────────────────────
 
-    def update_path(self) -> None:
-        self._ensure_waypoints()
-        self.maintain_port_alignment()
-        pts = self.full_points()
+    def _rebuild_path(self) -> None:
+        pts = self.route_points()
+        self._route_cache = pts
         if len(pts) < 2:
             return
         path = QPainterPath(QPointF(pts[0][0], pts[0][1]))
         for px, py in pts[1:]:
             path.lineTo(QPointF(px, py))
         self.setPath(path)
+
+    def update_path(self) -> None:
+        self._ensure_waypoints()
+        self._rebuild_path()
         self._apply_style()
 
     def update_path_only(self) -> None:
-        """Lightweight path rebuild (no style recalc) – called during drag."""
-        pts = self.full_points()
-        if len(pts) < 2:
-            return
-        path = QPainterPath(QPointF(pts[0][0], pts[0][1]))
-        for px, py in pts[1:]:
-            path.lineTo(QPointF(px, py))
-        self.setPath(path)
+        """Rebuild path tanpa hitung ulang style; dipakai saat drag."""
+        self._rebuild_path()
 
     def _apply_style(self) -> None:
         result = state.last_results.get("links", {}).get(self.link_tag, {})
@@ -469,99 +476,204 @@ class EdgeItem(QGraphicsPathItem):
         else:
             color = QColor(230, 80, 80)
         w = 3.0 if self.isSelected() else 2.0
+        if self._hovered and not self.isSelected():
+            # Hover menebalkan dan mencerahkan kabel agar mudah dipilih.
+            color = color.lighter(135)
+            w = 3.5
         self.setPen(QPen(color, w, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
                          Qt.PenJoinStyle.RoundJoin))
 
-    # ── segment handles ───────────────────────────────────────────────
+    def boundingRect(self) -> QRectF:
+        # Diperluas untuk marker belok/segmen yang digambar di luar garis.
+        return super().boundingRect().adjusted(-9.0, -9.0, 9.0, 9.0)
 
-    def update_handles(self) -> None:
-        for h in self.handles:
-            if h.scene():
-                self.scene().removeItem(h)
-        self.handles.clear()
+    def paint(self, painter: QPainter, option, widget=None) -> None:
+        # Matikan marquee seleksi dashed bawaan Qt; seleksi sudah punya
+        # gaya sendiri (garis kuning tebal + marker).
+        opt = QStyleOptionGraphicsItem(option)
+        opt.state &= ~QStyle.StateFlag.State_Selected
+        super().paint(painter, opt, widget)
 
         if not self.isSelected():
             return
-
-        wps = state.link_waypoints.get(self.link_tag, [])
-        N = len(wps)
-        if N < 2:
+        pts = self._route_cache or self.route_points()
+        if len(pts) < 2:
             return
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-        # Handle hanya muncul saat link dipilih supaya canvas tetap bersih untuk laporan.
-        # Internal segments: indices j = 1 .. N-1 in full-points numbering,
-        # which maps to waypoints[j-1] → waypoints[j].
-        for j in range(1, N):
-            wp_l, wp_r = j - 1, j
-            p1, p2 = wps[wp_l], wps[wp_r]
-            # Skip zero-length segments
-            if abs(p1[0] - p2[0]) < 2.0 and abs(p1[1] - p2[1]) < 2.0:
+        # Marker tengah segmen: affordance bahwa segmen bisa digeser.
+        painter.setBrush(QBrush(QColor(70, 160, 220)))
+        painter.setPen(QPen(QColor(20, 24, 28), 1.0))
+        for i in range(len(pts) - 1):
+            (x1, y1), (x2, y2) = pts[i], pts[i + 1]
+            if hypot(x2 - x1, y2 - y1) < 28.0:
                 continue
-            # Skip horizontal segments adjacent to ports (would break alignment)
-            is_horiz = abs(p1[1] - p2[1]) < abs(p1[0] - p2[0])
-            if is_horiz and (j == 1 or j == N - 1):
-                continue
-            h = SegmentHandleItem(self, wp_l, wp_r)
-            self.scene().addItem(h)
-            self.handles.append(h)
+            mx, my = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+            if abs(y2 - y1) <= abs(x2 - x1):
+                painter.drawRect(QRectF(mx - 5.0, my - 3.0, 10.0, 6.0))
+            else:
+                painter.drawRect(QRectF(mx - 3.0, my - 5.0, 6.0, 10.0))
 
-    # ── double-click: toggle extra bends ──────────────────────────────
-
-    def mouseDoubleClickEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._toggle_bends()
-            event.accept()
-            return
-        super().mouseDoubleClickEvent(event)
-
-    def _toggle_bends(self) -> None:
-        """Toggle between simple 2-waypoint route and 4-waypoint route
-        with 3 draggable handles."""
-        lt = self.link_tag
-        wps = state.link_waypoints.get(lt, [])
-        s, e = self._port_positions()
-        if s is None or e is None:
-            return
-
-        if len(wps) <= 2:
-            # Double-click memberi rute ekstra untuk menghindari node yang menutupi kabel.
-            # 2 wp → 4 wp  (V segment becomes V-H-V)
-            if len(wps) < 2:
-                return
-            mx = wps[0][0]
-            mid_y = round(((s.y() + e.y()) / 2.0) / 12.0) * 12.0
-            off_x = round((mx + 48.0) / 12.0) * 12.0
-            state.link_waypoints[lt] = [
-                (mx, s.y()),
-                (mx, mid_y),
-                (off_x, mid_y),
-                (off_x, e.y()),
-            ]
-        else:
-            # Rute kompleks bisa dikembalikan agar diagram mudah dirapikan.
-            # Complex → reset to simple 2 wp
-            state.link_waypoints[lt] = auto_ortho_waypoints(
-                s.x(), s.y(), e.x(), e.y()
-            )
-
-        state.mark_model_dirty()
-        state.clear_results()
-        self.update_path()
-        self.update_handles()
+        # Titik belok digambar di atas marker agar struktur rute terbaca.
+        painter.setBrush(QBrush(QColor(100, 210, 255)))
+        for px, py in pts[1:-1]:
+            painter.drawEllipse(QPointF(px, py), 4.0, 4.0)
 
     # ── hit testing ───────────────────────────────────────────────────
 
     def shape(self) -> QPainterPath:
         stroker = QPainterPathStroker()
-        stroker.setWidth(10.0)
+        # Stroke ekstra lebar: kabel harus bisa diklik tanpa presisi.
+        stroker.setWidth(24.0)
         stroker.setCapStyle(Qt.PenCapStyle.RoundCap)
         stroker.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         return stroker.createStroke(self.path())
 
+    # ── direct segment dragging ───────────────────────────────────────
+
+    def _nearest_segment(self, scene_pos: QPointF) -> int | None:
+        """Index segmen rute terdekat dari posisi mouse."""
+        pts = self._route_cache or self.route_points()
+        if len(pts) < 2:
+            return None
+        best_i, best_d = None, 1e9
+        for i in range(len(pts) - 1):
+            a = QPointF(pts[i][0], pts[i][1])
+            b = QPointF(pts[i + 1][0], pts[i + 1][1])
+            d = _seg_dist(scene_pos, a, b)
+            if d < best_d:
+                best_i, best_d = i, d
+        return best_i
+
+    def _segment_orientation(self, seg_index) -> str:
+        pts = self._route_cache or self.route_points()
+        if seg_index is None or seg_index >= len(pts) - 1:
+            return "h"
+        (x1, y1), (x2, y2) = pts[seg_index], pts[seg_index + 1]
+        return "h" if abs(y2 - y1) <= abs(x2 - x1) else "v"
+
+    def _materialize_route(self) -> None:
+        """Tulis rute ter-normalisasi ke state agar index segmen stabil.
+
+        Setelah ini, waypoint di state == rute yang terlihat, sehingga drag
+        segmen punya jaminan tetangga selalu tegak lurus (tidak ada diagonal).
+        """
+        route = self.route_points()
+        if len(route) >= 2:
+            state.link_waypoints[self.link_tag] = [tuple(p) for p in route[1:-1]]
+            self._route_cache = route
+
+    def _promote_port_segments(self) -> None:
+        """Sisipkan waypoint stub di port agar segmen ujung ikut bisa digeser.
+
+        Tanpa ini, menggeser segmen yang menempel ke port akan memutus
+        sambungan; dengan stub, port tetap tersambung seperti di draw.io.
+        """
+        s, e = self._port_positions()
+        wps = state.link_waypoints.get(self.link_tag)
+        if s is None or e is None or wps is None:
+            return
+        n_before = len(wps)
+        if self._drag_seg == 0:
+            wps.insert(0, (s.x(), s.y()))
+            self._drag_seg = 1
+        last_seg = len(wps)  # segmen wps[-1] -> end pada penomoran rute
+        if self._drag_seg == last_seg and len(wps) == n_before:
+            wps.append((e.x(), e.y()))
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._materialize_route()
+            self._drag_seg = self._nearest_segment(event.scenePos())
+            self._drag_started = False
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_seg is None:
+            super().mouseMoveEvent(event)
+            return
+        if not self._drag_started:
+            # Snapshot sekali di awal drag supaya seluruh geser jadi satu undo.
+            qt_model.push_undo_snapshot()
+            self._promote_port_segments()
+            self._drag_started = True
+        wps = state.link_waypoints.get(self.link_tag, [])
+        # Segmen rute i menghubungkan wps[i-1] dan wps[i].
+        li, ri = self._drag_seg - 1, self._drag_seg
+        if li < 0 or ri >= len(wps):
+            return
+        p1, p2 = wps[li], wps[ri]
+        pos = event.scenePos()
+        if abs(p2[1] - p1[1]) <= abs(p2[0] - p1[0]):
+            # Segmen horizontal digeser vertikal, snap ke grid 12 px.
+            new_y = round(pos.y() / 12.0) * 12.0
+            wps[li] = (p1[0], new_y)
+            wps[ri] = (p2[0], new_y)
+        else:
+            new_x = round(pos.x() / 12.0) * 12.0
+            wps[li] = (new_x, p1[1])
+            wps[ri] = (new_x, p2[1])
+        self.update_path_only()
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if self._drag_started:
+            # Rute dirapikan (belokan nol/kolinear dibuang) lalu disimpan.
+            self._materialize_route()
+            state.mark_model_dirty()
+            self.update_path()
+        self._drag_seg = None
+        self._drag_started = False
+        super().mouseReleaseEvent(event)
+
+    # ── double-click: rapikan rute otomatis ───────────────────────────
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.reset_route()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def reset_route(self) -> None:
+        """Kembalikan kabel ke rute otomatis yang rapi."""
+        s, e = self._port_positions()
+        if s is None or e is None:
+            return
+        qt_model.push_undo_snapshot()
+        state.link_waypoints[self.link_tag] = auto_ortho_waypoints(
+            s.x(), s.y(), e.x(), e.y()
+        )
+        state.mark_model_dirty()
+        self.update_path()
+        self.scene_ref.statusChanged.emit("Rute kabel dirapikan.", False)
+
+    # ── hover feedback ────────────────────────────────────────────────
+
+    def hoverEnterEvent(self, event):
+        self._hovered = True
+        self._apply_style()
+        super().hoverEnterEvent(event)
+
+    def hoverMoveEvent(self, event):
+        # Cursor menunjukkan arah geser segmen di bawah mouse.
+        seg = self._nearest_segment(event.scenePos())
+        if self._segment_orientation(seg) == "h":
+            self.setCursor(Qt.CursorShape.SizeVerCursor)
+        else:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        super().hoverMoveEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        self._hovered = False
+        self.unsetCursor()
+        self._apply_style()
+        super().hoverLeaveEvent(event)
+
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
             self._apply_style()
-            self.update_handles()
+            self.update()
         return super().itemChange(change, value)
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -583,7 +695,7 @@ class NodeItem(QGraphicsObject):
         self.scene_ref = scene_ref
         nd = state.nodes[node_tag]
         # Posisi scene adalah world_pos model; zoom/pan murni transform view.
-        self.width, self.height = NODE_SIZES.get(nd.get("kind"), (170.0, 100.0))
+        self.width, self.height = NODE_SIZES.get(nd.get("kind"), (168.0, 96.0))
         self.setPos(QPointF(*nd.get("world_pos", (0.0, 0.0))))
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
@@ -592,12 +704,31 @@ class NodeItem(QGraphicsObject):
 
         self._hovered_port: str | None = None   # attr_key being hovered
         self._port_valid: bool = True
+        # Menyala saat kabel yang menempel ke node ini sedang dipilih.
+        self._linked_glow: bool = False
+
+    def set_linked_glow(self, on: bool) -> None:
+        if on != self._linked_glow:
+            self._linked_glow = on
+            self.update()
 
     # ── geometry ──────────────────────────────────────────────────────
 
     def boundingRect(self) -> QRectF:
         # Extend horizontally to accommodate port labels drawn outside
         return QRectF(-70.0, -14.0, self.width + 140.0, self.height + 28.0)
+
+    def shape(self) -> QPainterPath:
+        """Hitbox presisi: hanya badan kartu + lingkaran port.
+
+        Tanpa override ini, Qt memakai boundingRect (yang melebar 70 px untuk
+        label port) sehingga klik di samping kartu mengenai node, bukan kabel.
+        """
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(0, 0, self.width, self.height), 6, 6)
+        for _, _, loc in port_layout(self.node_tag):
+            path.addEllipse(loc, PORT_HIT_RADIUS, PORT_HIT_RADIUS)
+        return path
 
     # ── paint ─────────────────────────────────────────────────────────
 
@@ -611,6 +742,16 @@ class NodeItem(QGraphicsObject):
             border = QColor(255, 230, 80)
 
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        # Glow saat kabel yang menempel sedang dipilih: cincin kuning lembut
+        # supaya ujung koneksi langsung dikenali di canvas.
+        if self._linked_glow and not self.isSelected():
+            glow = QColor(SELECTED_LINK)
+            glow.setAlpha(110)
+            painter.setPen(QPen(glow, 5.0))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(body.adjusted(-4, -4, 4, 4), 9, 9)
+            border = SELECTED_LINK
 
         # Body
         painter.setPen(QPen(border, 2.4 if self.isSelected() else 1.6))
@@ -630,9 +771,9 @@ class NodeItem(QGraphicsObject):
                          Qt.AlignmentFlag.AlignVCenter, node_title(self.node_tag))
 
         # Body text
-        painter.setPen(MUTED_TEXT)
         y = 46.0
-        for line in node_lines(self.node_tag):
+        for line, line_color in node_lines(self.node_tag):
+            painter.setPen(line_color if line_color else MUTED_TEXT)
             painter.drawText(QPointF(12, y), line)
             y += 18.0
 
@@ -664,6 +805,16 @@ class NodeItem(QGraphicsObject):
             painter.setPen(QPen(QColor(20, 20, 18), 1.4))
             painter.drawEllipse(local, r, r)
 
+            # Nub kecil di tiap slot fan-out: terlihat ke mana kabel menempel.
+            offsets = attachment_offsets(self.node_tag, attr_tag)
+            if len(offsets) > 1:
+                painter.setBrush(QBrush(PORT_CONNECTED))
+                painter.setPen(QPen(QColor(20, 20, 18), 1.0))
+                for off in offsets.values():
+                    if abs(off) > 1.0:
+                        painter.drawEllipse(
+                            QPointF(local.x(), local.y() + off), 3.0, 3.0)
+
             # Port label – HIDE when already connected, or for single-port components to keep the layout clean
             if not connected and nd.get("kind") not in ("gen", "load", "shunt"):
                 label_w = painter.fontMetrics().horizontalAdvance(label)
@@ -691,6 +842,24 @@ class NodeItem(QGraphicsObject):
                 return self.mapToScene(loc)
         return None
 
+    def attachment_scene_pos(self, attr_tag, link_tag) -> QPointF | None:
+        """Titik sambung kabel untuk satu link tertentu (fan-out).
+
+        Kalau beberapa kabel memakai port yang sama, tiap kabel mendapat
+        slot titik sambung sendiri yang disebar vertikal di sisi kartu,
+        diurutkan menurut posisi ujung lain agar kabel tidak saling silang.
+        """
+        nd = state.nodes.get(self.node_tag, {})
+        base = None
+        for attr_key, _, loc in port_layout(self.node_tag):
+            if nd.get(attr_key) == attr_tag:
+                base = loc
+                break
+        if base is None:
+            return None
+        offset = attachment_offsets(self.node_tag, attr_tag).get(link_tag, 0.0)
+        return self.mapToScene(QPointF(base.x(), base.y() + offset))
+
     # ── hover ─────────────────────────────────────────────────────────
 
     def hoverMoveEvent(self, event) -> None:
@@ -715,6 +884,13 @@ class NodeItem(QGraphicsObject):
     # ── movement / selection ──────────────────────────────────────────
 
     def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange:
+            # Snap-to-grid selalu aktif: posisi kartu menempel kelipatan grid
+            # sehingga port dan kabel otomatis sejajar rapi.
+            return QPointF(
+                round(value.x() / GRID_SNAP) * GRID_SNAP,
+                round(value.y() / GRID_SNAP) * GRID_SNAP,
+            )
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
             # Drag node langsung menulis world_pos agar save/load dan engine memakai posisi sama.
             qt_model.set_node_world_pos(self.node_tag, (value.x(), value.y()))
@@ -784,6 +960,10 @@ class GridScene(QGraphicsScene):
         item = EdgeItem(link_tag, self)
         self.edge_items[link_tag] = item
         self.addItem(item)
+        # Kabel lain di port yang sama bergeser slot fan-out-nya.
+        for edge in self.edge_items.values():
+            if edge is not item:
+                edge.update_path()
         self.modelChanged.emit()
         return item
 
@@ -815,17 +995,21 @@ class GridScene(QGraphicsScene):
     def remove_edge_item(self, link_tag):
         item = self.edge_items.pop(link_tag, None)
         if item:
-            for h in item.handles:
-                if h.scene():
-                    self.removeItem(h)
-            item.handles.clear()
             self.removeItem(item)
+        # Slot fan-out bergeser saat jumlah kabel di port berubah.
+        for edge in self.edge_items.values():
+            edge.update_path()
         self.modelChanged.emit()
 
-    def port_scene_pos(self, attr_tag):
+    def port_scene_pos(self, attr_tag, link_tag=None):
         nt = state.attr_to_node.get(attr_tag)
         item = self.node_items.get(nt)
-        return item.port_scene_pos(attr_tag) if item else None
+        if not item:
+            return None
+        if link_tag is not None:
+            # Titik sambung per-kabel (fan-out) agar kabel tidak menumpuk.
+            return item.attachment_scene_pos(attr_tag, link_tag)
+        return item.port_scene_pos(attr_tag)
 
     def handle_port_click(self, attr_tag: str) -> None:
         if self.pending_attr is None:
@@ -856,7 +1040,7 @@ class GridScene(QGraphicsScene):
             if fa in attrs or ta in attrs:
                 edge = self.edge_items.get(lt)
                 if edge:
-                    edge.maintain_port_alignment()
+                    # route_points() menormalisasi ulang, cukup rebuild path.
                     edge.update_path()
 
     def refresh_all(self):
@@ -995,6 +1179,13 @@ class GridScene(QGraphicsScene):
         # State selection dipakai panel properti dan hasil power flow.
         state.selected_node[0] = nt
         state.selected_link[0] = lt
+        # Komponen di kedua ujung kabel terpilih ikut menyala sebagai penanda.
+        glow_nodes = set()
+        if lt and lt in state.links:
+            fa, ta = state.links[lt]
+            glow_nodes = {state.attr_to_node.get(fa), state.attr_to_node.get(ta)}
+        for tag, item in self.node_items.items():
+            item.set_linked_glow(tag in glow_nodes)
         self.selectionModelChanged.emit(nt, lt)
 
 
@@ -1174,7 +1365,7 @@ class GridView(QGraphicsView):
         # visible_scene_rect membaca area dunia yang sedang terlihat oleh kamera.
         vis = self.visible_scene_rect()
         # Ukuran node dipakai untuk mengecek overlap dengan node lain.
-        size = NODE_SIZES.get(kind, (170, 100))
+        size = NODE_SIZES.get(kind, (168, 96))
         existing = []
         for item in self.scene().node_items.values():
             # Existing bounds dibuat dari posisi dan ukuran tiap NodeItem.

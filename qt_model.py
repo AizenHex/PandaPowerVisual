@@ -132,7 +132,15 @@ def default_node_values(kind: str, label: str | None = None) -> dict:
             "va_degree": 0.0,
         }
     if kind == "gen":
-        return {"label": label or f"Gen {state.next_id('gen')}", "p_mw": 1.0, "q_mvar": 0.0}
+        return {
+            "label": label or f"Gen {state.next_id('gen')}",
+            "p_mw": 1.0,
+            "q_mvar": 0.0,
+            # ctrl_mode "pq" = static generator; "pv" = kontrol tegangan (create_gen).
+            "ctrl_mode": "pq",
+            "vm_pu": 1.0,
+            "sn_mva": 1.0,
+        }
     if kind == "trafo":
         return {
             "label": label or f"Trafo {state.next_id('trafo')}",
@@ -415,6 +423,7 @@ def snapshot_model() -> dict:
             "vkr_percent",
             "pfe_kw",
             "i0_percent",
+            "ctrl_mode",
         ):
             if key in nd:
                 item[key] = nd[key]

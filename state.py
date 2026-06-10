@@ -103,12 +103,13 @@ def link_touches_attr(attr_tag, exclude_link=None) -> bool:
 # Setiap entry: dict {"nodes":..., "links":..., "line_data":..., "positions":...}
 # Positions disimpan terpisah karena posisi node hidup di DPG, bukan di state.
 _undo_stack: list = []
+_redo_stack: list = []
 UNDO_LIMIT = 30
 
 
-def push_undo(positions: dict | None = None):
-    """Simpan snapshot dari nodes/links/line_data + positions opsional."""
-    snap = {
+def snapshot_state(positions: dict | None = None) -> dict:
+    """Buat snapshot lengkap model untuk undo/redo."""
+    return {
         "nodes": copy.deepcopy(nodes),
         "links": copy.deepcopy(links),
         "line_data": copy.deepcopy(line_data),
@@ -118,9 +119,15 @@ def push_undo(positions: dict | None = None):
         "counters": copy.deepcopy(_counters),
         "positions": dict(positions) if positions else {},
     }
-    _undo_stack.append(snap)
+
+
+def push_undo(positions: dict | None = None):
+    """Simpan snapshot dari nodes/links/line_data + positions opsional."""
+    _undo_stack.append(snapshot_state(positions))
     if len(_undo_stack) > UNDO_LIMIT:
         del _undo_stack[: len(_undo_stack) - UNDO_LIMIT]
+    # Aksi baru membuat cabang sejarah baru, jadi redo lama tidak berlaku lagi.
+    _redo_stack.clear()
 
 
 def pop_undo():
@@ -129,12 +136,37 @@ def pop_undo():
     return _undo_stack.pop()
 
 
+def push_redo_snapshot(positions: dict | None = None):
+    """Simpan kondisi sekarang ke redo stack (dipanggil sebelum undo dipulihkan)."""
+    _redo_stack.append(snapshot_state(positions))
+    if len(_redo_stack) > UNDO_LIMIT:
+        del _redo_stack[: len(_redo_stack) - UNDO_LIMIT]
+
+
+def pop_redo():
+    if not _redo_stack:
+        return None
+    return _redo_stack.pop()
+
+
+def push_undo_for_redo(positions: dict | None = None):
+    """Simpan kondisi sekarang ke undo stack tanpa menghapus redo stack."""
+    _undo_stack.append(snapshot_state(positions))
+    if len(_undo_stack) > UNDO_LIMIT:
+        del _undo_stack[: len(_undo_stack) - UNDO_LIMIT]
+
+
 def clear_undo():
     _undo_stack.clear()
+    _redo_stack.clear()
 
 
 def undo_depth() -> int:
     return len(_undo_stack)
+
+
+def redo_depth() -> int:
+    return len(_redo_stack)
 
 
 def reset():

@@ -161,11 +161,18 @@ def validate_model():
             if not list(_connected_links(nt)):
                 warnings.append(f"{nd['label']} belum terhubung.")
         elif kind == "gen":
-            # Generator dimodelkan sebagai static generator, sehingga P tidak boleh negatif.
+            # Generator PQ dimodelkan sebagai static generator, P tidak boleh negatif.
             p_mw = _require_number(errors, nd["label"], nd, "p_mw")
             if p_mw is not None and p_mw < 0:
                 errors.append(f"{nd['label']} punya p_mw generator < 0.")
             _require_number(errors, nd["label"], nd, "q_mvar")
+            if nd.get("ctrl_mode") == "pv":
+                # Generator PV mengatur tegangan bus, jadi setpoint harus masuk akal.
+                vm_pu = _num(nd, "vm_pu", 1.0)
+                if vm_pu is None:
+                    errors.append(f"{nd['label']} punya vm_pu yang bukan angka.")
+                elif not 0.8 <= vm_pu <= 1.2:
+                    errors.append(f"{nd['label']} punya vm_pu PV di luar 0.8-1.2 pu.")
             if not _has_bus_neighbor(nt):
                 errors.append(f"{nd['label']} belum terhubung ke bus.")
         elif kind == "load":
@@ -294,6 +301,10 @@ def _collect_results(net, node_to_pidx, line_map):
         elif table_name == "sgen":
             result_table = net.res_sgen
             fields = ["p_mw", "q_mvar"]
+        elif table_name == "gen":
+            # Generator PV menghasilkan Q otomatis untuk menahan tegangan setpoint.
+            result_table = net.res_gen
+            fields = ["p_mw", "q_mvar", "vm_pu", "va_degree"]
         elif table_name == "shunt":
             result_table = net.res_shunt
             fields = ["p_mw", "q_mvar", "vm_pu"]
@@ -433,12 +444,22 @@ def build_pp_network():
         # Komponen satu-terminal dipasang ke bus tetangga hasil validasi koneksi.
         kind = nd["kind"]
         if kind == "gen":
-            # Generator memakai create_sgen karena ini sumber daya statis.
             b = _find_bus_for(nt, node_to_pidx)
             if b is not None:
-                idx = pp.create_sgen(net, bus=b, p_mw=nd["p_mw"],
-                                     q_mvar=nd["q_mvar"], name=nd["label"])
-                state.pp_element_map[nt] = ("sgen", idx)
+                if nd.get("ctrl_mode") == "pv":
+                    # Mode PV memakai create_gen: P tetap, Q mengikuti setpoint tegangan.
+                    idx = pp.create_gen(net, bus=b, p_mw=nd["p_mw"],
+                                        vm_pu=nd.get("vm_pu", 1.0),
+                                        sn_mva=max(nd.get("sn_mva", 1.0), 0.001),
+                                        name=nd["label"])
+                    state.pp_element_map[nt] = ("gen", idx)
+                else:
+                    # Mode PQ memakai create_sgen (static generator) dengan P/Q tetap.
+                    idx = pp.create_sgen(net, bus=b, p_mw=nd["p_mw"],
+                                         q_mvar=nd["q_mvar"],
+                                         sn_mva=max(nd.get("sn_mva", 1.0), 0.001),
+                                         name=nd["label"])
+                    state.pp_element_map[nt] = ("sgen", idx)
         elif kind == "load":
             # Load memakai nilai P/Q dari panel properti.
             b = _find_bus_for(nt, node_to_pidx)
@@ -563,3 +584,43 @@ def run_pf():
 
     state.store_results(_collect_results(net, n2p, lmap))
     return True, "Konvergen", net, n2p, lmap
+
+
+_LINE_STD_TYPES_CACHE = None
+
+
+def line_std_types() -> dict:
+    """Mengembalikan {nama_tipe: {r_ohm_per_km, x_ohm_per_km, c_nf_per_km, max_i_ka}}.
+
+    Diambil dari standard types bawaan pandapower agar user bisa memilih
+    kabel/penghantar nyata tanpa mengetik parameter manual.
+    """
+    global _LINE_STD_TYPES_CACHE
+    if _LINE_STD_TYPES_CACHE is None:
+        table = pp.available_std_types(pp.create_empty_network(), "line")
+        result = {}
+        for name, row in table.iterrows():
+            result[str(name)] = {
+                "r_ohm_per_km": float(row["r_ohm_per_km"]),
+                "x_ohm_per_km": float(row["x_ohm_per_km"]),
+                "c_nf_per_km": float(row["c_nf_per_km"]),
+                "max_i_ka": float(row["max_i_ka"]),
+            }
+        _LINE_STD_TYPES_CACHE = result
+    return _LINE_STD_TYPES_CACHE
+
+
+def export_pandapower_json(path) -> str | None:
+    """Mengekspor model aktif sebagai file JSON pandapower asli.
+
+    Return None jika sukses, atau pesan error.
+    """
+    errors, _ = validate_model()
+    if errors:
+        return errors[0]
+    net, _, _ = build_pp_network()
+    try:
+        pp.to_json(net, str(path))
+    except Exception as exc:
+        return f"Gagal menulis file: {exc}"
+    return None

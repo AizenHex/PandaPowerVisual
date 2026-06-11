@@ -16,6 +16,7 @@ node_modules/
 scripts/
 tests/
 GridSimulator.exe
+release/~GridSimulatorInstaller*
 CMakeLists.txt
 
 # Zip files

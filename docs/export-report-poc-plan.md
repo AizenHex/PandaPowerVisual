@@ -20,7 +20,7 @@ Yang sudah tersedia di repo saat ini:
 Yang masih belum ada:
 
 - Export PDF native langsung dari aplikasi.
-- Coverage test yang lebih luas untuk variasi komponen dan jalur tulis file report.
+- Coverage test yang lebih luas untuk variasi komponen dan skenario hasil report.
 
 ## Asumsi
 

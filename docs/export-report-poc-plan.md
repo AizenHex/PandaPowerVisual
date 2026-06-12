@@ -15,7 +15,7 @@ Yang sudah tersedia di repo saat ini:
 - `report_export.py` sudah membangun HTML report dari `state.last_results` dan template `docs/report-template.html`.
 - Export menolak kondisi tanpa hasil power flow atau hasil yang sudah stale.
 - Tombol `Print / Save PDF` sudah tersedia di HTML agar user bisa menyimpan PDF lewat browser.
-- `tests/test_report_export.py` sudah mengecek guard export, struktur `report_data`, dan section penting pada HTML.
+- Verifikasi lokal pernah mencakup `tests/test_report_export.py` untuk guard export, struktur `report_data`, dan section penting pada HTML, tetapi folder `tests/` tidak termasuk isi branch utama yang sedang dilacak.
 
 Yang masih belum ada:
 
@@ -379,7 +379,7 @@ Rencana file:
   - Output berupa file `.html`.
   - Memuat CSS internal untuk layout, summary tiles, tabel, dan chart bar.
 
-- `tests/`
+- Verifikasi lokal di `tests/` bila checkout developer memang menyediakannya.
   - Test data report dari state sederhana.
   - Test HTML mengandung section penting.
   - Test export ditolak saat hasil stale atau kosong.

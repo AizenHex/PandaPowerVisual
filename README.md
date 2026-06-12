@@ -47,11 +47,8 @@ Run the smoke test without opening the window:
 python demo.py --smoke-power-flow
 ```
 
-Run the automated test suite:
-
-```powershell
-python -m unittest discover -s tests -v
-```
+Tracked verification in this branch is centered on the headless smoke check
+above.
 
 ## Building the Windows Executable
 
@@ -108,4 +105,6 @@ using the template in `docs/report-template.html`.
 
 The project name is written as **PANDAPOWER VISUALIZATION**. The application
 still contains a few older Dear PyGUI source files, but the main maintained
-interface is the PySide6/Qt implementation.
+interface is the PySide6/Qt implementation. A local `tests/` directory may
+exist in developer worktrees for extra verification, but it is not part of the
+tracked branch contents today.

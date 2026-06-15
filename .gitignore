@@ -15,6 +15,7 @@ node_modules/
 .Arsip/
 scripts/
 tests/
+grid_project.json
 GridSimulator.exe
 release/~GridSimulatorInstaller*
 CMakeLists.txt
@@ -30,6 +31,15 @@ v2-worktree/
 # Local migration/reference artifacts
 legacy_dpg/.ARSIP/
 legacy_dpg/scripts/
+
+# Local report and presentation build artifacts
+docs/build-laporan/
+docs/qa-laporan/
+docs/laporan-img/
+docs/ppt-build/
+docs/DOKUMENTASI_KODE_DETAIL.pdf
+docs/PANDAPOWER-VISUALIZATION.pptx
+docs/laporan-akhir-pandapower-visualization.pdf
 
 # PySide draft tests kept local; core branch only tracks the main app files
 legacy_dpg/tests/test_canvas_logic.py

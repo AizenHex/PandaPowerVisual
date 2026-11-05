@@ -101,10 +101,4 @@ using the template in `docs/report-template.html`.
 | `Ctrl++` / `Ctrl+-` / `Ctrl+0` | Zoom in / out / reset |
 | `Del` / `Backspace` | Delete selection |
 
-## Notes
-
-The project name is written as **PANDAPOWER VISUALIZATION**. The application
-still contains a few older Dear PyGUI source files, but the main maintained
-interface is the PySide6/Qt implementation. A local `tests/` directory may
-exist in developer worktrees for extra verification, but it is not part of the
 tracked branch contents today.
